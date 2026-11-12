@@ -189,9 +189,17 @@ export async function createAndSendInvoice(req: InvoiceRequest): Promise<Invoice
     },
   };
 
-  const { data: draft } = await paypal<PayPalInvoice>("POST", "/v2/invoicing/invoices", draftBody, {
-    Prefer: "return=representation",
-  });
+  const createDraft = (body: object) =>
+    paypal<PayPalInvoice>("POST", "/v2/invoicing/invoices", body, { Prefer: "return=representation" });
+
+  // Partial payments are unavailable for some merchant countries (e.g. India); retry without them.
+  let draft: PayPalInvoice | null;
+  try {
+    ({ data: draft } = await createDraft(draftBody));
+  } catch (err) {
+    if (!(err instanceof Error) || !/partial payments are not available/i.test(err.message)) throw err;
+    ({ data: draft } = await createDraft({ ...draftBody, configuration: { allow_tip: false } }));
+  }
   const selfLink = draft?.links?.find((l) => l.rel === "self")?.href;
   const id = draft?.id ?? idFromHref(selfLink) ?? idFromHref(draft?.href);
   if (!id) throw new Error("PayPal created an invoice but returned no id");
