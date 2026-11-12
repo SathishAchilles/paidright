@@ -259,7 +259,7 @@ export function Overview({
       <div className="rounded-panel border border-amber/50 bg-paper p-5 shadow-sm">
         <p className="text-xs font-semibold tracking-wide text-amber-ink uppercase">Needs attention</p>
         <h2 className="mt-1 font-display text-xl font-semibold text-navy sm:text-2xl">
-          {lateCount === 1 ? "One payment needs your attention." : `${countWord(lateCount)} payments need your attention.`}
+          {lateCount === 1 ? "One payment needs your attention." : `${countWord(lateCount).charAt(0).toUpperCase()}${countWord(lateCount).slice(1)} payments need your attention.`}
         </h2>
         {items.map((i) => (
           <p key={i.deliverableId} className="mt-1 text-ink">
