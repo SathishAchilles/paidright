@@ -17,6 +17,19 @@ export interface Deliverable {
   amountMinor: Minor;
   status: DeliverableStatus;
   approvedAt?: string; // ISO date
+  sourceQuote: string | null; // contract text that defines this deliverable
+  // Agreed payment schedule; always at least one. Amounts sum to amountMinor.
+  // A deliverable paid in one go has a single "Full payment" instalment.
+  instalments: Instalment[];
+}
+
+// One agreed payment for a deliverable, billed on its own PayPal invoice.
+export interface Instalment {
+  id: string;
+  label: string; // e.g. "Instalment 1 of 2"
+  amountMinor: Minor;
+  dueOffsetDays: number | null; // days after approval this payment is due
+  sourceQuote: string | null; // contract text that sets this payment
   invoice?: InvoiceRef;
 }
 
@@ -76,21 +89,29 @@ export interface InvoiceRef {
   status: PayPalInvoiceStatus;
   totalMinor: Minor;
   paidMinor: Minor; // gross paid by the client, from PayPal
+  dueDate: string | null; // YYYY-MM-DD from PayPal payment_term.due_date
   lastRefreshedAt: string; // ISO
   lastReminderAt?: string; // ISO
 }
 
+// Deliverable-level classification, in priority order.
 export type GapClass =
-  | "PAID" // fully paid
-  | "UNDERPAID" // partially paid; the remainder is a client receivable
-  | "UNPAID" // invoiced, nothing paid yet
-  | "NOT_INVOICED" // approved/billable but no invoice: money left on the table
+  | "PAID" // every instalment paid
+  | "OVERDUE" // an invoiced instalment is unpaid past its due date
+  | "NOT_INVOICED" // approved but an instalment has no invoice: money left on the table
+  | "UNDERPAID" // some instalments paid, the rest invoiced and not yet due
+  | "UNPAID" // invoiced, nothing paid, nothing overdue yet
   | "NOT_DUE"; // not yet approved
 
 export interface Gap {
   deliverableId: string;
   gapClass: GapClass;
-  dueMinor: Minor; // what the client still owes (never includes PayPal fees)
+  totalMinor: Minor; // deliverable amount
+  paidMinor: Minor; // gross paid across all instalments (from PayPal)
+  dueMinor: Minor; // total - paid: what the client still owes (never PayPal fees)
+  overdueMinor: Minor; // part of dueMinor that is past its due date
+  overdueInstalmentId: string | null; // first overdue instalment, if any
+  daysOverdue: number | null;
 }
 
 export type ClockKind = "USAGE_EXPIRED" | "REVISIONS_EXCEEDED";

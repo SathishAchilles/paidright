@@ -13,7 +13,7 @@ This Influencer Content Agreement ("Agreement") is entered into on October 20, 2
 
 4. Revisions. The fee includes two (2) rounds of revisions per deliverable. Any additional revision round requested by Brand will be billed at USD 75 per round.
 
-5. Payment. Creator will issue a PayPal invoice for each deliverable. Payment will be released once content goes live or is approved, and is due net thirty (30) days from the invoice date.
+5. Payment. Creator will issue a PayPal invoice for each deliverable. Payment will be released once content goes live or is approved, and is due net thirty (30) days from the invoice date. As an exception, the Stories fee of USD 300 is payable in two (2) equal instalments of USD 150, each invoiced separately: the first instalment is due on Brand's approval of the Stories, and the second instalment is due fourteen (14) days after that approval.
 
 6. Paid Usage. Creator grants Brand the right to use the Reel and the cutdown pack in paid social advertising, including whitelisting through Creator's handle, for thirty (30) days starting November 5, 2026. Each additional thirty (30) day period of paid usage will be billed at USD 250.
 

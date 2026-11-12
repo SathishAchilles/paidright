@@ -143,6 +143,7 @@ interface PayPalInvoice {
   status?: PayPalInvoiceStatus;
   detail?: {
     invoice_number?: string;
+    payment_term?: { due_date?: string };
     metadata?: { recipient_view_url?: string };
   };
   amount?: { value?: string };
@@ -180,26 +181,14 @@ export async function createAndSendInvoice(req: InvoiceRequest): Promise<Invoice
         unit_amount: { currency_code: req.currency, value: minorToValue(req.amountMinor) },
       },
     ],
-    configuration: {
-      partial_payment: {
-        allow_partial_payment: true,
-        minimum_amount_due: { currency_code: req.currency, value: "1.00" },
-      },
-      allow_tip: false,
-    },
+    // Partial payments are unavailable for India-based merchants; split payments
+    // are modelled as separate instalment invoices instead.
+    configuration: { allow_tip: false },
   };
 
-  const createDraft = (body: object) =>
-    paypal<PayPalInvoice>("POST", "/v2/invoicing/invoices", body, { Prefer: "return=representation" });
-
-  // Partial payments are unavailable for some merchant countries (e.g. India); retry without them.
-  let draft: PayPalInvoice | null;
-  try {
-    ({ data: draft } = await createDraft(draftBody));
-  } catch (err) {
-    if (!(err instanceof Error) || !/partial payments are not available/i.test(err.message)) throw err;
-    ({ data: draft } = await createDraft({ ...draftBody, configuration: { allow_tip: false } }));
-  }
+  const { data: draft } = await paypal<PayPalInvoice>("POST", "/v2/invoicing/invoices", draftBody, {
+    Prefer: "return=representation",
+  });
   const selfLink = draft?.links?.find((l) => l.rel === "self")?.href;
   const id = draft?.id ?? idFromHref(selfLink) ?? idFromHref(draft?.href);
   if (!id) throw new Error("PayPal created an invoice but returned no id");
@@ -226,6 +215,7 @@ export async function getInvoice(id: string): Promise<InvoiceRef> {
     status: data.status ?? "DRAFT",
     totalMinor: valueToMinor(data.amount?.value),
     paidMinor: valueToMinor(data.payments?.paid_amount?.value),
+    dueDate: data.detail?.payment_term?.due_date ?? null,
     lastRefreshedAt: new Date().toISOString(),
   };
 }

@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
-import { money } from "@/lib/format";
+import { moneyShort } from "@/lib/format";
 import { computeGap } from "@/lib/gap";
 import { getDeal, getToday, saveDeal, setToday } from "@/lib/store";
-import type { Deal } from "@/lib/types";
+import type { Deal, Gap } from "@/lib/types";
 import { ClocksPanel } from "./ClocksPanel";
 import type { UpdateDeal } from "./dealOps";
 import { DeliverablesTable } from "./DeliverablesTable";
@@ -46,9 +46,16 @@ function Workspace({ id }: { id: string }) {
 
   if (!deal) return <NotFound message="This deal isn't saved in this browser." />;
 
-  const gaps = deal.deliverables.map((d) => ({ d, gap: computeGap(d) }));
-  const outstanding = gaps.reduce((s, { gap }) => s + gap.dueMinor, 0);
-  const open = gaps.filter(({ gap }) => gap.gapClass === "UNDERPAID" || gap.gapClass === "UNPAID");
+  const gaps = deal.deliverables.map((d) => ({ d, gap: computeGap(d, today) }));
+  const sum = (f: (g: Gap) => number) => gaps.reduce((s, { gap }) => s + f(gap), 0);
+  const paid = sum((g) => g.paidMinor);
+  const overdue = sum((g) => g.overdueMinor);
+  const notYetDue = sum((g) => (g.gapClass === "NOT_DUE" ? g.totalMinor : g.dueMinor - g.overdueMinor));
+  const rank = (g: Gap) => (g.gapClass === "OVERDUE" ? 0 : 1);
+  const open = gaps
+    .filter(({ gap }) => ["OVERDUE", "UNDERPAID", "UNPAID"].includes(gap.gapClass))
+    .sort((a, b) => rank(a.gap) - rank(b.gap));
+  const cur = deal.currency;
 
   return (
     <div className="flex flex-col gap-6">
@@ -59,9 +66,17 @@ function Workspace({ id }: { id: string }) {
           </Link>
           <h1 className="mt-1 font-serif text-3xl">{deal.brand}</h1>
           <p className="mt-1 text-sm text-ink-soft">
-            {deal.creator} · {deal.brandEmail || "no brand email"} · contract total{" "}
-            <span className="tabular-nums text-ink">{money(deal.totalMinor, deal.currency)}</span> · still owed{" "}
-            <span className="tabular-nums font-semibold text-ink">{money(outstanding, deal.currency)}</span>
+            {deal.creator} · {deal.brandEmail || "no brand email"}
+          </p>
+          <p className="mt-2 text-base tabular-nums">
+            <span className="font-semibold">{moneyShort(deal.totalMinor, cur)} deal</span>
+            <span className="text-ink-soft"> · </span>
+            <span className="text-ok">{moneyShort(paid, cur)} paid</span>
+            <span className="text-ink-soft"> · </span>
+            <span className={overdue > 0 ? "font-semibold text-danger" : "text-ink-soft"}>
+              {moneyShort(overdue, cur)} overdue
+            </span>
+            <span className="text-ink-soft"> · {moneyShort(notYetDue, cur)} not yet due</span>
           </p>
         </div>
         <label className="flex flex-col gap-1 text-sm">

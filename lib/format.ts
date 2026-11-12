@@ -4,6 +4,16 @@ export function money(minor: Minor, currency: Currency): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(minor / 100);
 }
 
+export function moneyShort(minor: Minor, currency: Currency): string {
+  const whole = minor % 100 === 0;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: whole ? 0 : 2,
+    maximumFractionDigits: whole ? 0 : 2,
+  }).format(minor / 100);
+}
+
 export function toMinor(major: string): Minor {
   const n = parseFloat(major);
   return Number.isFinite(n) ? Math.round(n * 100) : 0;

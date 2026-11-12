@@ -23,7 +23,19 @@ export interface ExtractResponse {
   brandEmail: string;
   creator: string;
   currency: Currency;
-  deliverables: { name: string; amountMinor: Minor; sourceQuote: string | null }[];
+  deliverables: {
+    name: string;
+    amountMinor: Minor;
+    sourceQuote: string | null;
+    // Always at least one; amounts sum to amountMinor (code enforces, else one
+    // "Full payment" instalment due terms.paymentDays after approval).
+    instalments: {
+      label: string;
+      amountMinor: Minor;
+      dueOffsetDays: number | null;
+      sourceQuote: string | null;
+    }[];
+  }[];
   terms: Terms;
   flags: Flag[];
 }

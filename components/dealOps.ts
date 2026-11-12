@@ -17,7 +17,14 @@ export function applyInvoice(deal: Deal, inv: InvoiceRef): Deal {
   const match = (i?: InvoiceRef) => i?.paypalInvoiceId === inv.paypalInvoiceId;
   return {
     ...deal,
-    deliverables: deal.deliverables.map((d) => (match(d.invoice) ? { ...d, invoice: merge(d.invoice!, inv) } : d)),
+    deliverables: deal.deliverables.map((d) =>
+      d.instalments.some((i) => match(i.invoice))
+        ? {
+            ...d,
+            instalments: d.instalments.map((i) => (match(i.invoice) ? { ...i, invoice: merge(i.invoice!, inv) } : i)),
+          }
+        : d,
+    ),
     changeOrders: deal.changeOrders.map((c) => (match(c.invoice) ? { ...c, invoice: merge(c.invoice!, inv) } : c)),
   };
 }
@@ -32,6 +39,7 @@ export async function createInvoice(
   lineItem: string,
   amountMinor: number,
   note: string,
+  dueInDays: number,
 ): Promise<InvoiceRef> {
   const { invoice } = await post<InvoiceRequest, InvoiceResponse>("/api/invoice", {
     currency: deal.currency,
@@ -40,14 +48,30 @@ export async function createInvoice(
     lineItem,
     amountMinor,
     note,
-    dueInDays: deal.terms.paymentDays ?? 30,
+    dueInDays,
   });
   return invoice;
 }
 
 export function allInvoiceIds(deal: Deal): string[] {
   return [
-    ...deal.deliverables.flatMap((d) => (d.invoice ? [d.invoice.paypalInvoiceId] : [])),
+    ...deal.deliverables.flatMap((d) => d.instalments.flatMap((i) => (i.invoice ? [i.invoice.paypalInvoiceId] : []))),
     ...deal.changeOrders.flatMap((c) => (c.invoice ? [c.invoice.paypalInvoiceId] : [])),
   ];
+}
+
+export function patchInstalmentInvoice(
+  deal: Deal,
+  deliverableId: string,
+  instalmentId: string,
+  patch: (inv: InvoiceRef | undefined) => InvoiceRef | undefined,
+): Deal {
+  return {
+    ...deal,
+    deliverables: deal.deliverables.map((d) =>
+      d.id === deliverableId
+        ? { ...d, instalments: d.instalments.map((i) => (i.id === instalmentId ? { ...i, invoice: patch(i.invoice) } : i)) }
+        : d,
+    ),
+  };
 }

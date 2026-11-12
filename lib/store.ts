@@ -1,7 +1,7 @@
 import { localISODate } from "./format";
 import type { Deal } from "./types";
 
-const DEALS_KEY = "paidright.deals";
+const DEALS_KEY = "paidright.deals.v2";
 const TODAY_KEY = "paidright.today";
 export const DEALS_EVENT = "paidright:deals";
 
@@ -17,9 +17,19 @@ export function readDealsRaw(): string | null {
   return hasStorage() ? window.localStorage.getItem(DEALS_KEY) : null;
 }
 
+function isCurrentShape(d: Deal): boolean {
+  return (
+    !!d &&
+    Array.isArray(d.deliverables) &&
+    Array.isArray(d.changeOrders) &&
+    d.deliverables.every((x) => Array.isArray(x.instalments) && x.instalments.length > 0)
+  );
+}
+
 export function parseDeals(raw: string | null): Deal[] {
   try {
-    return raw ? (JSON.parse(raw) as Deal[]) : [];
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? (parsed as Deal[]).filter(isCurrentShape) : [];
   } catch {
     return [];
   }

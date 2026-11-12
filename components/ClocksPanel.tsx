@@ -85,7 +85,7 @@ function ClockEventRow({ deal, event, update }: { deal: Deal; event: ClockEvent;
   const onInvoice = () =>
     invoiceAction.run(async () => {
       if (!draft) return;
-      const invoice = await createInvoice(deal, draft.lineItem, draft.amountMinor, draft.note);
+      const invoice = await createInvoice(deal, draft.lineItem, draft.amountMinor, draft.note, deal.terms.paymentDays ?? 30);
       const co: ChangeOrder = { ...draft, invoice };
       update((d) => ({ ...d, changeOrders: [...d.changeOrders, co] }));
     });

@@ -64,24 +64,26 @@ export const inputClass =
 
 const gapStyles: Record<GapClass, string> = {
   PAID: "bg-ok-bg text-ok",
-  UNDERPAID: "bg-danger-bg text-danger",
-  UNPAID: "bg-warn-bg text-warn",
-  NOT_INVOICED: "bg-accent-bg text-accent-strong",
+  OVERDUE: "bg-danger-bg text-danger",
+  NOT_INVOICED: "bg-warn-bg text-warn",
+  UNDERPAID: "bg-accent-bg text-accent-strong",
+  UNPAID: "bg-muted-bg text-ink",
   NOT_DUE: "bg-muted-bg text-ink-soft",
 };
 
 const gapLabels: Record<GapClass, string> = {
   PAID: "Paid",
-  UNDERPAID: "Underpaid",
-  UNPAID: "Unpaid",
+  OVERDUE: "Overdue",
   NOT_INVOICED: "Not invoiced",
-  NOT_DUE: "Not due",
+  UNDERPAID: "Partly paid",
+  UNPAID: "Unpaid",
+  NOT_DUE: "Not yet due",
 };
 
-export function GapBadge({ gapClass }: { gapClass: GapClass }) {
+export function GapBadge({ gapClass, label }: { gapClass: GapClass; label?: string }) {
   return (
     <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold tracking-wide uppercase ${gapStyles[gapClass]}`}>
-      {gapLabels[gapClass]}
+      {label ?? gapLabels[gapClass]}
     </span>
   );
 }

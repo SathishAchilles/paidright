@@ -37,7 +37,7 @@ export function DeliverablesTable({ deal, today, update }: { deal: Deal; today: 
             <tr className="text-left text-xs tracking-wide text-ink-soft uppercase">
               <th className="pb-2 font-semibold">Deliverable</th>
               <th className="pb-2 text-right font-semibold">Amount</th>
-              <th className="pb-2 font-semibold">Status</th>
+              <th className="pb-2 font-semibold">Status / due</th>
               <th className="pb-2 font-semibold">PayPal invoice</th>
               <th className="pb-2 text-right font-semibold">Paid</th>
               <th className="pb-2 font-semibold">Gap</th>
