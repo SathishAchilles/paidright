@@ -4,6 +4,8 @@ A contract-to-cash agent for creators: it reads a brand-deal contract, bills eac
 
 Built for the PayPal AI Hackathon (Devpost).
 
+**Live demo:** https://paidright.vercel.app (PayPal sandbox; click "Load sample deal (GlowLab)", then "Extract with AI")
+
 ## The problem
 
 Indian UGC creators and video editors increasingly do paid work for US and UK brands and get paid through PayPal invoices. Money leaks out in three places:
