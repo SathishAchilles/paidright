@@ -1,4 +1,4 @@
-// Judge demo campaign: fictional Aanya x US Skincare Brand deal, pre-billed on
+// Judge demo campaign: fictional Aanya x GlowLab deal, pre-billed on
 // real PayPal sandbox invoices. Statuses come from PayPal on refresh; the
 // values below are only the starting snapshot before the first refresh.
 
@@ -10,9 +10,9 @@ export const DEMO_DEAL_ID = "demo-aanya";
 // Real sandbox invoices created for the demo (see README). Reel and Stories
 // instalment 1 were paid by the sandbox buyer; instalment 2 is left unpaid.
 export const DEMO_INVOICES = {
-  reel: { id: "INV2-8AWB-2X2X-94G5-8G93", number: "0005", dueDate: "2026-11-12" },
-  storiesI1: { id: "INV2-2UBU-TJT6-4SEA-69JD", number: "0006", dueDate: "2026-11-12" },
-  storiesI2: { id: "INV2-6533-HSNC-3JRY-ZDC4", number: "0007", dueDate: "2026-11-26" },
+  reel: { id: "INV2-2CL5-CVSW-4QTX-R7N2", number: "0008", dueDate: "2026-11-12" },
+  storiesI1: { id: "INV2-3FDN-D4JR-E3LW-L9NJ", number: "0009", dueDate: "2026-11-12" },
+  storiesI2: { id: "INV2-KSRZ-UZL6-JVV8-KQEY", number: "0010", dueDate: "2026-11-26" },
 };
 
 export const DEMO_APPROVED_AT = "2026-11-12";
@@ -33,7 +33,7 @@ function snapshot(inv: { id: string; number: string; dueDate: string }, totalMin
 export function buildDemoDeal(): Deal {
   return {
     id: DEMO_DEAL_ID,
-    brand: "US Skincare Brand, Inc.",
+    brand: "GlowLab, Inc.",
     brandEmail: "brand@example.com",
     creator: "Aanya Rao",
     currency: "USD",
@@ -60,7 +60,7 @@ export function buildDemoDeal(): Deal {
       revisionRateMinor: 7500,
       usageDays: 30,
       usageStart: "2026-11-05",
-      usageExtensionRateMinor: 25000,
+      usageExtensionRateMinor: 20000,
       usageExtensionDays: 30,
       feesBorneBy: null,
     },

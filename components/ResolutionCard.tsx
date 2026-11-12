@@ -1,65 +1,63 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { ExplainRequest, ExplainResponse, RemindRequest, RemindResponse } from "@/lib/api-contract";
-import { formatDateTime, moneyShort as money } from "@/lib/format";
-import { isInstalmentPaid } from "@/lib/gap";
-import type { Deal, Deliverable, Gap, Instalment, InvoiceRef } from "@/lib/types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { ExplainRequest, ExplainResponse } from "@/lib/api-contract";
+import { formatDay, shortBrand } from "@/lib/clocks";
+import { formatDateTime, money, moneyShort } from "@/lib/format";
+import { instalmentPaid, isInstalmentPaid } from "@/lib/gap";
+import type { Deal, Deliverable, Gap, InvoiceRef } from "@/lib/types";
 import { post } from "./api";
-import { patchInstalmentInvoice, type UpdateDeal } from "./dealOps";
-import { useAction } from "./useAction";
-
-type Outcome = "SENT" | "ALREADY_PAID" | "NOT_REMINDABLE";
-
-const OUTCOME_COPY: Record<Outcome, string> = {
-  SENT: "Reminder sent through PayPal. Your action has been recorded.",
-  ALREADY_PAID: "This invoice is now marked paid in PayPal. No reminder was sent.",
-  NOT_REMINDABLE: "This action can't be sent right now. Check the invoice status and reminder limits.",
-};
+import { patchInstalmentInvoice, wasChecked, type UpdateDeal } from "./dealOps";
+import { EvidenceTimeline, instalmentOrdinal, instalmentWords } from "./EvidenceTimeline";
+import { fallbackReminder, ReminderReview } from "./ReminderReview";
 
 const btnBase =
   "inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50";
-const btnPrimary = `${btnBase} border-[#305CE8] bg-[#305CE8] text-white hover:bg-[#2549BF]`;
-const btnSecondary = `${btnBase} border-[#DCE2E9] bg-white text-[#1B2839] hover:border-[#1B2839]`;
+const btnPrimary = `${btnBase} border-blue bg-blue text-white hover:bg-blue-strong`;
+const btnSecondary = `${btnBase} border-hairline bg-surface text-ink hover:border-ink`;
 
-function formatDate(iso: string): string {
-  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+const REVEAL_MS = 300;
+const REVEAL_KEYFRAMES = "@keyframes pr-reveal{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}";
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-function humanStatus(s: string): string {
-  const t = s.replace(/_/g, " ").toLowerCase();
-  return t.charAt(0).toUpperCase() + t.slice(1);
+// "Three Instagram Stories are", "Instagram Reel is".
+function isPlural(name: string): boolean {
+  return /s$/i.test(name.trim());
 }
 
-function instalmentName(i: Instalment, index: number, count: number): string {
-  return count > 1 && !/\d/.test(i.label) ? `Instalment ${index + 1} of ${count}` : i.label;
+function prefersReducedMotion(): boolean {
+  try {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  } catch {
+    return false;
+  }
 }
 
 function Spinner() {
   return <span className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />;
 }
 
-function Check() {
+function Mark({ tone }: { tone: "verified" | "overdue" | "unknown" }) {
+  if (tone === "unknown") {
+    return <span aria-hidden className="mt-1 size-3 shrink-0 rounded-full border-2 border-ink-soft" />;
+  }
   return (
-    <svg viewBox="0 0 16 16" aria-hidden className="mt-0.5 size-4 shrink-0 text-[#188B77]">
+    <svg viewBox="0 0 16 16" aria-hidden className={`mt-0.5 size-4 shrink-0 ${tone === "overdue" ? "text-amber" : "text-mint"}`}>
       <path d="M3 8.5l3.2 3L13 4.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="border-t border-[#DCE2E9] pt-4">
-      <h4 className="mb-2 text-xs font-semibold tracking-wider text-[#5B6878] uppercase">{title}</h4>
-      {children}
-    </div>
-  );
+interface EvidenceItem {
+  key: string;
+  label: string;
+  text: string;
+  detail?: string | null;
+  quote?: string | null;
+  tone: "verified" | "overdue" | "unknown";
 }
 
 export function ResolutionCard({
@@ -73,51 +71,136 @@ export function ResolutionCard({
   gap: Gap;
   update: UpdateDeal;
 }) {
-  const explain = useAction();
-  const remind = useAction();
-  const [result, setResult] = useState<ExplainResponse | null>(null);
-  const [note, setNote] = useState("");
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const [paidInvoice, setPaidInvoice] = useState<InvoiceRef | null>(null);
+  const [explained, setExplained] = useState<ExplainResponse | null>(null);
+  const [explainError, setExplainError] = useState<string | null>(null);
+  const [explaining, setExplaining] = useState(false);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [draft, setDraft] = useState<{ note: string; failed: boolean } | null>(null);
+  const inflight = useRef<Promise<ExplainResponse | null> | null>(null);
 
   const overdue = gap.gapClass === "OVERDUE";
   const disputed = !!d.disputed;
-  const count = d.instalments.length;
   const cur = deal.currency;
+  const brand = shortBrand(deal.brand);
 
   const target =
     d.instalments.find((i) => i.id === gap.overdueInstalmentId) ??
     d.instalments.find((i) => i.invoice && !isInstalmentPaid(i));
-  const targetLabel = target ? instalmentName(target, d.instalments.indexOf(target), count) : null;
   const invoice = target?.invoice;
-  const paidInstalments = d.instalments.filter((i) => i.invoice && isInstalmentPaid(i));
-
+  const paid = d.instalments.filter((i) => i.invoice && isInstalmentPaid(i));
   const amount = overdue ? gap.overdueMinor : gap.dueMinor;
-  const days = gap.daysOverdue ?? 0;
-  const headline = overdue ? `${money(amount, cur)} is overdue` : `${money(amount, cur)} awaiting payment`;
-  const refreshed = invoice && new Date(invoice.lastRefreshedAt).getFullYear() > 2000;
+  const remaining = target ? target.amountMinor - instalmentPaid(target) : amount;
 
-  const context = [
-    d.name,
-    targetLabel,
-    invoice?.dueDate && `Due ${formatDate(invoice.dueDate)}`,
-    overdue && `${days} day${days === 1 ? "" : "s"} overdue`,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  // Headline: amount -> status -> why.
+  const headline = overdue
+    ? `${moneyShort(amount, cur)} is overdue. Here is how we know.`
+    : `${moneyShort(amount, cur)} is awaiting payment.`;
+  const subline = `Payment review: ${d.name}${target ? ` / ${instalmentWords(d, target)}` : ""}`;
+  const bigAmount = `${money(amount, cur)} ${overdue ? "overdue" : "awaiting payment"}`;
 
-  const finding = [
+  const targetOrd = target ? instalmentOrdinal(d, target) : "";
+  const oneLiner =
+    [
+      d.approvedAt ? "Brand approved work" : "Brand approval not recorded",
+      ...paid.map((i) => (d.instalments.length > 1 ? `${instalmentOrdinal(d, i)} instalment paid` : "payment received")),
+      invoice &&
+        (overdue
+          ? `${targetOrd ? `${targetOrd} ` : ""}PayPal invoice past due`
+          : `${targetOrd ? `${targetOrd} ` : ""}PayPal invoice ${invoice.dueDate ? `due ${formatDay(invoice.dueDate)}` : "unpaid"}`),
+    ]
+      .filter(Boolean)
+      .join("; ") + ".";
+
+  // Evidence checklist, in reading order.
+  const count = d.instalments.length;
+  const equalSplit = count > 1 && d.instalments.every((i) => i.amountMinor === d.instalments[0].amountMinor);
+  const scheduleText =
+    count === 1
+      ? "paid in one payment"
+      : equalSplit
+        ? `paid in ${count === 2 ? "two" : count} ${moneyShort(d.instalments[0].amountMinor, cur)} instalments`
+        : `paid in ${count} instalments`;
+
+  const paidText = paid.map((i) => {
+    const ord = instalmentOrdinal(d, i);
+    return `the ${ord ? `${ord} ` : ""}${moneyShort(i.amountMinor, cur)} invoice is paid`;
+  });
+  const targetText = target
+    ? `the ${targetOrd ? `${targetOrd} ` : `${moneyShort(target.amountMinor, cur)} invoice `}${
+        overdue ? "remains unpaid after its due date" : invoice?.dueDate ? `is unpaid and due on ${formatDay(invoice.dueDate)}` : "is unpaid"
+      }`
+    : null;
+  const paypalText = capitalize([...paidText, targetText].filter(Boolean).join("; ")) + ".";
+
+  const invoiceList = d.instalments
+    .filter((i) => i.invoice)
+    .map((i) => `${i.invoice!.invoiceNumber} (${isInstalmentPaid(i) ? "paid" : i.invoice!.status.replace(/_/g, " ").toLowerCase()})`)
+    .join(", ");
+  const checkedTimes = d.instalments
+    .map((i) => i.invoice?.lastRefreshedAt)
+    .filter((t): t is string => wasChecked(t))
+    .sort();
+  const lastChecked = checkedTimes.length ? checkedTimes[checkedTimes.length - 1] : null;
+
+  const evidence: EvidenceItem[] = [
+    {
+      key: "agreement",
+      label: "Agreement",
+      text: `The agreement says the ${d.name} ${isPlural(d.name) ? "are" : "is"} worth ${moneyShort(d.amountMinor, cur)}, ${scheduleText}.`,
+      quote: d.sourceQuote ?? target?.sourceQuote,
+      tone: "verified",
+    },
     d.approvedAt
-      ? `The brand approved this deliverable on ${formatDate(d.approvedAt)} and agreed to pay ${money(target?.amountMinor ?? amount, cur)}${targetLabel ? ` in ${targetLabel.toLowerCase()}` : ""}.`
-      : `The brand agreed to pay ${money(target?.amountMinor ?? amount, cur)}${targetLabel ? ` in ${targetLabel.toLowerCase()}` : ""}.`,
-    overdue && invoice?.dueDate
-      ? `The invoice is past its due date (${formatDate(invoice.dueDate)}), and PayPal has not confirmed payment.`
-      : invoice?.dueDate
-        ? `The invoice is due on ${formatDate(invoice.dueDate)}, and PayPal has not confirmed payment yet.`
-        : "PayPal has not confirmed payment yet.",
-  ].join(" ");
+      ? {
+          key: "approval",
+          label: "Brand approval",
+          text: `${brand} approved the ${d.name} on ${formatDay(d.approvedAt)}.`,
+          tone: "verified",
+        }
+      : {
+          key: "approval",
+          label: "Brand approval",
+          text: `No approval from ${brand} is recorded yet.`,
+          tone: "unknown",
+        },
+    {
+      key: "paypal",
+      label: "PayPal record",
+      text: paypalText,
+      detail: invoiceList
+        ? `Invoice${d.instalments.filter((i) => i.invoice).length === 1 ? "" : "s"} ${invoiceList} · ${
+            lastChecked ? `last checked ${formatDateTime(lastChecked)}` : "not checked with PayPal yet"
+          }`
+        : null,
+      tone: !lastChecked ? "unknown" : overdue ? "overdue" : "verified",
+    },
+    {
+      key: "rule",
+      label: "Financial rule",
+      text: `The ${moneyShort(amount, cur)} gap is an unpaid obligation, not processing fees.`,
+      tone: "verified",
+    },
+    {
+      key: "recommendation",
+      label: "Agent recommendation",
+      text: disputed
+        ? "Hold reminders while this payment is under review."
+        : overdue
+          ? `Send ${brand} a reminder with the invoice and approval record attached.`
+          : `The invoice is not past due yet. You can wait, or send ${brand} a friendly reminder now.`,
+      tone: disputed ? "unknown" : "verified",
+    },
+  ];
 
-  const quote = target?.sourceQuote ?? d.sourceQuote;
+  // Sequential reveal; instant when the user prefers reduced motion.
+  const [revealed, setRevealed] = useState(() => (prefersReducedMotion() ? evidence.length : 1));
+  const allShown = revealed >= evidence.length;
+  useEffect(() => {
+    if (allShown) return;
+    const t = setTimeout(() => setRevealed((r) => r + 1), REVEAL_MS);
+    return () => clearTimeout(t);
+  }, [revealed, allShown]);
 
   const setDisputed = (value: boolean) =>
     update((x) => ({
@@ -125,206 +208,202 @@ export function ResolutionCard({
       deliverables: x.deliverables.map((dd) => (dd.id === d.id ? { ...dd, disputed: value } : dd)),
     }));
 
-  const replaceInvoice = (next: InvoiceRef) => {
-    if (!target) return;
-    update((x) =>
-      patchInstalmentInvoice(x, d.id, target.id, (old) => ({
-        ...next,
-        payerViewUrl: next.payerViewUrl ?? old?.payerViewUrl ?? null,
-        lastReminderAt: next.lastReminderAt ?? old?.lastReminderAt,
-      })),
-    );
-  };
+  const targetId = target?.id;
+  const replaceInvoice = useCallback(
+    (next: InvoiceRef) => {
+      if (!targetId) return;
+      update((x) =>
+        patchInstalmentInvoice(x, d.id, targetId, (old) => ({
+          ...next,
+          payerViewUrl: next.payerViewUrl ?? old?.payerViewUrl ?? null,
+          lastReminderAt: next.lastReminderAt ?? old?.lastReminderAt,
+        })),
+      );
+    },
+    [update, d.id, targetId],
+  );
 
-  const applyPaid = () => {
-    if (!paidInvoice) return;
-    replaceInvoice(paidInvoice);
-    setPaidInvoice(null);
-  };
-
-  useEffect(() => {
-    if (!paidInvoice) return;
-    const t = setTimeout(applyPaid, 6000);
-    return () => clearTimeout(t);
-  });
-
-  const onExplain = () =>
-    explain.run(async () => {
-      const res = await post<ExplainRequest, ExplainResponse>("/api/explain", { deal, deliverableId: d.id, gap });
-      setResult(res);
-      setNote(res.reminderText);
-      setOutcome(null);
-    });
-
-  const onRemind = () =>
-    remind.run(async () => {
-      if (!target || !invoice) return;
-      setOutcome(null);
-      const res = await post<RemindRequest, RemindResponse>("/api/remind", {
-        paypalInvoiceId: invoice.paypalInvoiceId,
-        subject: `Reminder: ${invoice.invoiceNumber}`,
-        note,
+  // One /api/explain call feeds both "View sources" and the reminder draft.
+  const ensureExplained = (): Promise<ExplainResponse | null> => {
+    if (explained) return Promise.resolve(explained);
+    if (inflight.current) return inflight.current;
+    setExplaining(true);
+    setExplainError(null);
+    const p = post<ExplainRequest, ExplainResponse>("/api/explain", { deal, deliverableId: d.id, gap })
+      .then((res) => {
+        setExplained(res);
+        return res;
+      })
+      .catch((e: unknown) => {
+        setExplainError(e instanceof Error ? e.message : String(e));
+        return null;
+      })
+      .finally(() => {
+        inflight.current = null;
+        setExplaining(false);
       });
-      if (res.ok) {
-        replaceInvoice({ ...res.invoice, lastReminderAt: res.sentAt });
-        setOutcome("SENT");
-      } else if (res.reason === "ALREADY_PAID") {
-        setPaidInvoice(res.invoice);
-        setOutcome("ALREADY_PAID");
-      } else {
-        replaceInvoice(res.invoice);
-        setOutcome("NOT_REMINDABLE");
-      }
+    inflight.current = p;
+    return p;
+  };
+
+  const onReview = async () => {
+    if (!invoice) return;
+    setRevealed(evidence.length);
+    setReviewOpen(true);
+    const res = await ensureExplained();
+    setDraft({
+      note: res?.reminderText?.trim() || fallbackReminder(deal, d, remaining, invoice, overdue),
+      failed: !res,
     });
+  };
+
+  const onSources = () => {
+    setSourcesOpen((o) => !o);
+    if (!explained && !explaining) void ensureExplained();
+  };
+
+  const quotes = [
+    d.sourceQuote && { key: d.id, label: d.name, text: d.sourceQuote },
+    ...d.instalments.map(
+      (i) => i.sourceQuote && { key: i.id, label: capitalize(instalmentWords(d, i)), text: i.sourceQuote },
+    ),
+  ].filter((q): q is { key: string; label: string; text: string } => !!q);
 
   return (
     <article
       id={`resolution-${d.id}`}
       tabIndex={-1}
-      className="scroll-mt-6 rounded-2xl border border-[#DCE2E9] bg-white p-6 text-[#1B2839] outline-none focus-visible:ring-2 focus-visible:ring-[#305CE8]"
+      className="scroll-mt-6 rounded-2xl border border-hairline bg-surface p-6 text-ink outline-none focus-visible:ring-2 focus-visible:ring-blue"
     >
-      <p className="text-xs font-semibold tracking-wider text-[#5B6878] uppercase">Payment review</p>
-      <h3 className={`mt-1 text-3xl font-semibold tabular-nums ${overdue ? "text-[#C57630]" : "text-[#1B2839]"}`}>
-        {headline}
-      </h3>
-      <p className="mt-1 text-sm text-[#5B6878]">{context}</p>
+      <style href="paidright-reveal" precedence="default">
+        {REVEAL_KEYFRAMES}
+      </style>
+
+      <h3 className="font-display text-xl font-semibold text-ink">{headline}</h3>
+      <p className="mt-1 text-sm text-ink-soft">{subline}</p>
+      <p className={`mt-4 text-4xl font-semibold tabular-nums ${overdue ? "text-amber" : "text-ink"}`}>{bigAmount}</p>
+      <p className="mt-2 text-sm text-ink">{oneLiner}</p>
 
       {disputed && (
         <div
           role="status"
-          className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#C57630]/40 bg-[#C57630]/10 px-4 py-3 text-sm"
+          className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber/40 bg-amber-bg px-4 py-3 text-sm text-amber-ink"
         >
-          <span>This payment is under review. Automated follow-ups are paused.</span>
+          <span>This payment is under review. Automated reminders are paused.</span>
           <button type="button" className={btnSecondary} onClick={() => setDisputed(false)}>
             Remove dispute
           </button>
         </div>
       )}
 
-      <div className="mt-5 flex flex-col gap-4">
-        <Section title="What Paidright found">
-          <p className="text-sm leading-relaxed">{finding}</p>
-        </Section>
-
-        <Section title="Evidence checked">
-          <ul className="flex flex-col gap-2 text-sm">
-            <li className="flex gap-2">
-              <Check />
-              <span>
-                Agreement confirms payment terms
-                {quote && <span className="block text-[#5B6878] italic">&ldquo;{quote}&rdquo;</span>}
-              </span>
-            </li>
-            {d.approvedAt && (
-              <li className="flex gap-2">
-                <Check />
-                <span>Brand approval recorded {formatDate(d.approvedAt)}</span>
-              </li>
-            )}
-            {paidInstalments.map((i) => (
-              <li key={i.id} className="flex gap-2">
-                <Check />
-                <span className="tabular-nums">
-                  PayPal verified {instalmentName(i, d.instalments.indexOf(i), count)} paid on invoice{" "}
-                  {i.invoice!.invoiceNumber} ({money(i.amountMinor, cur)})
-                </span>
-              </li>
-            ))}
-            {invoice && (
-              <li className="flex gap-2">
-                <Check />
-                <span>
-                  PayPal invoice {invoice.invoiceNumber} status{" "}
-                  {refreshed ? `checked ${formatDateTime(invoice.lastRefreshedAt)}` : "(not refreshed yet)"}:{" "}
-                  {humanStatus(invoice.status)} — {targetLabel} remains unpaid
-                </span>
-              </li>
-            )}
-            <li className="flex gap-2">
-              <Check />
-              <span>PayPal fees are not part of this amount</span>
-            </li>
-          </ul>
-        </Section>
-
-        <Section title="Recommended action">
-          <p className="text-sm">Send a reminder with the invoice and approval evidence.</p>
-
-          {result && (
-            <div className="mt-4 flex flex-col gap-3">
-              <div>
-                <p className="text-xs font-semibold tracking-wider text-[#5B6878] uppercase">Agent explanation</p>
-                <p className="mt-1 text-sm leading-relaxed">{result.explanation}</p>
-              </div>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium">Reminder preview</span>
-                <textarea
-                  className="h-32 w-full rounded-lg border border-[#DCE2E9] bg-white px-3 py-2 text-sm text-[#1B2839] focus:border-[#305CE8] focus:outline-none"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                />
-              </label>
-              {invoice && (
-                <p className="text-xs text-[#5B6878]">
-                  To: {deal.brand} &lt;{deal.brandEmail}&gt; via PayPal invoice {invoice.invoiceNumber}
-                </p>
-              )}
-            </div>
-          )}
-
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            {!result && (
-              <button
-                type="button"
-                className={btnSecondary}
-                disabled={explain.loading || disputed}
-                onClick={onExplain}
-              >
-                {explain.loading && <Spinner />}
-                Prepare reminder
-              </button>
-            )}
+      <div className="mt-5 border-t border-hairline pt-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h4 className="text-xs font-semibold tracking-wider text-ink-soft uppercase">Evidence checked</h4>
+          {!allShown && (
             <button
               type="button"
-              className={btnPrimary}
-              disabled={!result || !note.trim() || !invoice || disputed || remind.loading}
-              onClick={onRemind}
+              className="text-xs font-medium text-blue underline underline-offset-4"
+              onClick={() => setRevealed(evidence.length)}
             >
-              {remind.loading && <Spinner />}
-              Approve and send reminder
+              Show all
             </button>
-            {!disputed && (
-              <button type="button" className={btnSecondary} onClick={() => setDisputed(true)}>
-                Mark as disputed
-              </button>
+          )}
+        </div>
+        <ol className="flex flex-col gap-3 text-sm">
+          {evidence.slice(0, revealed).map((e) => (
+            <li key={e.key} className="flex gap-3 motion-safe:animate-[pr-reveal_250ms_ease-out_both]">
+              <Mark tone={e.tone} />
+              <div>
+                <p className="text-xs font-semibold text-ink-soft">{e.label}</p>
+                <p>{e.text}</p>
+                {e.quote && <p className="mt-0.5 text-ink-soft italic">&ldquo;{e.quote}&rdquo;</p>}
+                {e.detail && <p className="mt-0.5 text-xs text-ink-soft tabular-nums">{e.detail}</p>}
+              </div>
+            </li>
+          ))}
+        </ol>
+        {allShown && (
+          <p className="mt-4 text-xs text-ink-soft">
+            AI connects evidence; code calculates the money; PayPal verifies the payment status.
+          </p>
+        )}
+      </div>
+
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        {!reviewOpen && (
+          <button type="button" className={btnPrimary} disabled={disputed || !invoice} onClick={() => void onReview()}>
+            Review reminder
+          </button>
+        )}
+        <button type="button" className={btnSecondary} aria-expanded={sourcesOpen} onClick={onSources}>
+          {sourcesOpen ? "Hide sources" : "View sources"}
+        </button>
+        {!disputed && (
+          <button type="button" className={btnSecondary} onClick={() => setDisputed(true)}>
+            Mark disputed
+          </button>
+        )}
+      </div>
+
+      {sourcesOpen && (
+        <div className="mt-4 flex flex-col gap-3 rounded-xl bg-canvas p-4 text-sm">
+          <div>
+            <p className="text-xs font-semibold tracking-wider text-ink-soft uppercase">From the agreement</p>
+            {quotes.length ? (
+              <ul className="mt-1 flex flex-col gap-1">
+                {quotes.map((q) => (
+                  <li key={q.key}>
+                    <span className="text-ink-soft">{q.label}: </span>
+                    <span className="italic">&ldquo;{q.text}&rdquo;</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-1 text-ink-soft">No clause was quoted for this deliverable.</p>
             )}
           </div>
+          <div>
+            <p className="text-xs font-semibold tracking-wider text-ink-soft uppercase">Agent explanation</p>
+            {explaining && (
+              <p className="mt-1 flex items-center gap-2 text-ink-soft">
+                <Spinner /> Reading the agreement and PayPal records…
+              </p>
+            )}
+            {explained && <p className="mt-1 leading-relaxed">{explained.explanation}</p>}
+            {explainError && !explaining && (
+              <p className="mt-1 text-ink-soft">
+                The explanation isn&apos;t available right now. The evidence above comes straight from your agreement and PayPal.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
-          {explain.error && (
-            <p role="alert" className="mt-3 text-sm text-[#B3261E]">
-              {explain.error}
-            </p>
-          )}
-          {remind.error && (
-            <p role="alert" className="mt-3 text-sm text-[#B3261E]">
-              {remind.error}
-            </p>
-          )}
-          {outcome && (
-            <p role="status" className={`mt-3 text-sm ${outcome === "NOT_REMINDABLE" ? "text-[#C57630]" : "text-[#188B77]"}`}>
-              {OUTCOME_COPY[outcome]}
-              {paidInvoice && (
-                <button type="button" className="ml-2 font-medium underline underline-offset-4" onClick={applyPaid}>
-                  Update deal
-                </button>
-              )}
-            </p>
-          )}
-          {!outcome && invoice?.lastReminderAt && (
-            <p className="mt-3 text-sm text-[#5B6878]">Last reminder sent {formatDateTime(invoice.lastReminderAt)}</p>
-          )}
-        </Section>
-      </div>
+      {reviewOpen && invoice && !draft && (
+        <p className="mt-4 flex items-center gap-2 text-sm text-ink-soft">
+          <Spinner /> Preparing your reminder…
+        </p>
+      )}
+      {reviewOpen && invoice && draft && (
+        <ReminderReview
+          deal={deal}
+          invoice={invoice}
+          amountMinor={remaining}
+          overdue={overdue}
+          initialNote={draft.note}
+          draftFailed={draft.failed}
+          disputed={disputed}
+          onDispute={() => setDisputed(true)}
+          onInvoice={replaceInvoice}
+        />
+      )}
+
+      <details className="group mt-6 border-t border-hairline pt-4">
+        <summary className="cursor-pointer text-sm font-medium text-ink">See how PaidRight reached this conclusion.</summary>
+        <div className="mt-4">
+          <EvidenceTimeline deal={deal} deliverable={d} />
+        </div>
+      </details>
     </article>
   );
 }

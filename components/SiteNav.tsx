@@ -6,6 +6,7 @@ import { SITE } from "@/lib/site";
 
 const LINKS: { label: string; href: string; external?: boolean }[] = [
   { label: "How it works", href: "/#how" },
+  { label: "Technology", href: SITE.technologyPath },
   { label: "Watch demo", href: "/#watch" },
   { label: "GitHub", href: SITE.githubUrl, external: true },
 ];
@@ -51,7 +52,7 @@ export function SiteNav() {
     <header className="sticky top-0 z-50 border-b border-hairline bg-canvas/95 backdrop-blur supports-[backdrop-filter]:bg-canvas/85">
       <nav aria-label="Main" className="mx-auto flex h-16 max-w-[1200px] items-center justify-between gap-4 px-4 sm:px-6">
         <Link href="/" className="font-display text-xl font-semibold tracking-tight text-navy" onClick={close}>
-          paidright
+          PaidRight
         </Link>
 
         <ul className="hidden items-center gap-1 md:flex">

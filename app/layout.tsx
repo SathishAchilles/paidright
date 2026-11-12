@@ -7,8 +7,8 @@ const sans = Inter({ variable: "--font-inter", subsets: ["latin"], display: "swa
 const display = Geist({ variable: "--font-geist", subsets: ["latin"], display: "swap" });
 
 export const metadata: Metadata = {
-  title: "Paidright",
-  description: "AI receivables agent for creators working with international brands, on PayPal.",
+  title: "PaidRight",
+  description: "AI payment agent for creators working with global brands, on PayPal.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

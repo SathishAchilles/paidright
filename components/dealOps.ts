@@ -1,5 +1,6 @@
 import type { InvoiceRequest, InvoiceResponse, RefreshRequest, RefreshResponse } from "@/lib/api-contract";
 import type { Deal, InvoiceRef } from "@/lib/types";
+import { isDemoDeal } from "@/lib/demo";
 import { post } from "./api";
 
 export type UpdateDeal = (mutator: (d: Deal) => Deal) => void;
@@ -93,12 +94,51 @@ export function wasChecked(iso: string | undefined): iso is string {
 
 export const PAYPAL_COPY = {
   check: "Check status with PayPal",
-  checkAll: "Check all statuses with PayPal",
+  checkAll: "Check all with PayPal",
   checking: "Checking the latest invoice status with PayPal…",
-  updated: "Payment status updated from PayPal.",
-  failed: "We couldn't confirm the latest status. Your previous verified record is still available. Try again.",
+  updated: "Status updated from PayPal.",
+  failed: "Couldn't confirm the latest status. Last verified record remains available.",
+  failedNeverChecked: "Couldn't confirm the latest status with PayPal. Try again.",
   noInvoice: "No PayPal invoice has been created for this instalment.",
   submitted: "The work has been submitted. We're waiting for the brand's review.",
   sentUnpaid: "The invoice was sent. Payment has not been confirmed yet.",
   overdue: "This payment is past its agreed due date.",
+  noDueDate: "I couldn't find a clear due date. Please add one.",
+  payLinkHidden: "Payment link hidden in the shared demo so the case stays open for every judge.",
 } as const;
+
+export function isPaidStatus(status: InvoiceRef["status"]): boolean {
+  return status === "PAID" || status === "MARKED_AS_PAID";
+}
+
+// Demo invoices are shared by every judge, so their unpaid pay links stay hidden.
+export function canShowPayLink(deal: Deal, inv: InvoiceRef): boolean {
+  return !!inv.payerViewUrl && (isPaidStatus(inv.status) || !isDemoDeal(deal.id));
+}
+
+export function humanStatus(status: string): string {
+  const t = status.replaceAll("_", " ").toLowerCase();
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+export function brandShort(brand: string): string {
+  return brand.replace(/,?\s+(Inc|LLC|Ltd|Limited|Corp|Corporation|Co|GmbH|Pvt)\.?$/i, "").trim() || brand;
+}
+
+export function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0] || name;
+}
+
+export function dealTitle(deal: Deal): string {
+  return `${brandShort(deal.brand)} × ${firstName(deal.creator)}`;
+}
+
+// "Three Instagram Stories" -> "Stories", "Instagram Reel" -> "Reel": the name
+// a creator would use in a sentence.
+export function shortDeliverableName(name: string): string {
+  const short = name
+    .replace(/^(one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+/i, "")
+    .replace(/^(instagram|tiktok|youtube|facebook|linkedin|x)\s+/i, "")
+    .trim();
+  return short || name;
+}

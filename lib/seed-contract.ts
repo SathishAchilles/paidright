@@ -1,6 +1,6 @@
 export const SEED_CONTRACT = `INFLUENCER CONTENT AGREEMENT
 
-This Influencer Content Agreement ("Agreement") is entered into on October 20, 2026 between US Skincare Brand, Inc., a Delaware corporation ("Brand"), contact Sam Rivera, brand@example.com, and Aanya Rao, an independent content creator based in Bengaluru, India ("Creator").
+This Influencer Content Agreement ("Agreement") is entered into on October 20, 2026 between GlowLab, Inc., a Delaware corporation ("Brand"), contact Sam Rivera, brand@example.com, and Aanya Rao, an independent content creator based in Bengaluru, India ("Creator").
 
 1. Campaign. Creator will produce original content featuring the Vitamin C Dew Serum for the Brand's "Glow Season" campaign.
 
@@ -15,7 +15,7 @@ This Influencer Content Agreement ("Agreement") is entered into on October 20, 2
 
 5. Payment. Creator will issue a PayPal invoice for each deliverable. Payment will be released once content goes live or is approved, and is due net thirty (30) days from the invoice date. As an exception, the Stories fee of USD 300 is payable in two (2) equal instalments of USD 150, each invoiced separately: the first instalment is due on Brand's approval of the Stories, and the second instalment is due fourteen (14) days after that approval.
 
-6. Paid Usage. Creator grants Brand the right to use the Reel and the cutdown pack in paid social advertising, including whitelisting through Creator's handle, for thirty (30) days starting November 5, 2026. Each additional thirty (30) day period of paid usage will be billed at USD 250.
+6. Paid Usage. Creator grants Brand the right to use the Reel and the cutdown pack in paid social advertising, including whitelisting through Creator's handle, for thirty (30) days starting November 5, 2026. Each additional thirty (30) day period of paid usage will be billed at USD 200.
 
 7. Organic Usage. Brand may repost the content on its own organic social channels for twelve (12) months with credit to Creator.
 
@@ -30,6 +30,6 @@ This Influencer Content Agreement ("Agreement") is entered into on October 20, 2
 12. Governing Law. This Agreement is governed by the laws of the State of New York.
 
 Signed:
-Sam Rivera, for US Skincare Brand, Inc.
+Sam Rivera, for GlowLab, Inc.
 Aanya Rao, Creator
 `;

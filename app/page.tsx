@@ -1,16 +1,25 @@
 import Link from "next/link";
 import { HomeVideo } from "@/components/HomeVideo";
-import { HomeWorkflowTabs } from "@/components/HomeWorkflowTabs";
 import { SITE } from "@/lib/site";
 
 const container = "mx-auto w-full max-w-[1200px] px-4 sm:px-6";
 const section = "py-16 sm:py-24";
 const eyebrow = "text-xs font-semibold uppercase tracking-[0.14em]";
 const h2 = "text-3xl font-semibold leading-tight sm:text-4xl";
+const card = "rounded-xl border border-hairline bg-surface";
 const btnPrimary =
   "inline-flex h-12 items-center justify-center rounded-[10px] bg-blue px-6 text-base font-semibold text-white hover:bg-blue-strong";
 const btnSecondaryDark =
   "inline-flex h-12 items-center justify-center rounded-[10px] border border-white/30 px-6 text-base font-semibold text-white hover:border-white";
+
+type Tone = "paid" | "overdue" | "pending" | "approved";
+
+const TONE: Record<Tone, { pill: string; dot: string; label: string }> = {
+  paid: { pill: "bg-mint-bg text-mint", dot: "bg-mint", label: "Paid" },
+  overdue: { pill: "bg-amber-bg text-amber-ink", dot: "bg-amber", label: "Overdue" },
+  pending: { pill: "bg-muted-bg text-ink-soft", dot: "bg-ink-soft", label: "Awaiting approval" },
+  approved: { pill: "bg-blue-bg text-blue", dot: "bg-blue", label: "Approved" },
+};
 
 function External({ href, className, children }: { href: string; className?: string; children: React.ReactNode }) {
   return (
@@ -21,302 +30,435 @@ function External({ href, className, children }: { href: string; className?: str
   );
 }
 
-function SectionNumber({ n, dark = false }: { n: string; dark?: boolean }) {
-  return <p className={`${eyebrow} tabular ${dark ? "text-white/60" : "text-ink-soft"}`}>{n}</p>;
+function SectionNumber({ n }: { n: string }) {
+  return <p className={`${eyebrow} tabular text-ink-soft`}>{n}</p>;
 }
 
-/* 01 ─ Hero visual: a static, product-like card (no images). */
-function HeroCard() {
+function Pill({ tone, children }: { tone: Tone; children?: React.ReactNode }) {
+  return (
+    <span className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${TONE[tone].pill}`}>
+      {children ?? TONE[tone].label}
+    </span>
+  );
+}
+
+/* Hero product preview: the creator's money position for the canonical deal. */
+function HeroSummaryCard() {
   const rows = [
-    { label: "Agreed", amount: "$300", tone: "text-navy", dot: "bg-ink-soft" },
-    { label: "Paid", amount: "$150", tone: "text-mint", dot: "bg-mint" },
-    { label: "Overdue", amount: "$150", tone: "text-amber-ink", dot: "bg-amber" },
+    { label: "Approved work", amount: "$800", note: "Reel + Three Stories", tone: "text-navy" },
+    { label: "Paid", amount: "$650", note: "Verified in PayPal Sandbox", tone: "text-mint" },
+    { label: "Still owed", amount: "$150", note: "Stories instalment 2, overdue", tone: "text-amber-ink" },
   ];
   return (
     <figure
-      aria-label="Example: Aanya's campaign with a US skincare brand"
-      className="w-full rounded-2xl border border-hairline bg-surface p-5 text-ink shadow-[0_24px_48px_-24px_rgba(0,0,0,0.5)] sm:p-6"
+      aria-label="Example: GlowLab and Aanya payment summary"
+      className="w-full min-w-0 rounded-2xl border border-hairline bg-surface p-5 text-ink shadow-[0_24px_48px_-24px_rgba(0,0,0,0.5)] sm:p-6"
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="font-display text-lg font-semibold text-navy">Aanya × US Skincare Brand</p>
+        <div className="min-w-0">
+          <p className="font-display text-lg font-semibold text-navy">GlowLab × Aanya</p>
           <p className="tabular text-sm text-ink-soft">$1,200 campaign</p>
         </div>
-        <span className="rounded-full bg-amber-bg px-3 py-1 text-xs font-semibold text-amber-ink">Needs attention</span>
+        <Pill tone="overdue">$150 overdue</Pill>
       </div>
 
-      <div className="mt-5 rounded-xl border border-hairline">
-        <p className="border-b border-hairline px-4 py-2 text-sm font-semibold text-navy">Three Stories</p>
-        <dl className="divide-y divide-hairline">
-          {rows.map((r) => (
-            <div key={r.label} className="flex items-center justify-between px-4 py-3">
-              <dt className={`${eyebrow} flex items-center gap-2 text-ink-soft`}>
-                <span aria-hidden="true" className={`h-2 w-2 rounded-full ${r.dot}`} />
-                {r.label}
-              </dt>
-              <dd className={`tabular font-display text-lg font-semibold ${r.tone}`}>{r.amount}</dd>
-            </div>
-          ))}
-        </dl>
-      </div>
+      <dl className="mt-5 divide-y divide-hairline rounded-xl border border-hairline">
+        {rows.map((r) => (
+          <div key={r.label} className="flex items-center justify-between gap-3 px-4 py-3">
+            <dt className="min-w-0">
+              <span className="block text-sm font-semibold text-navy">{r.label}</span>
+              <span className="block text-xs text-ink-soft">{r.note}</span>
+            </dt>
+            <dd className={`tabular font-display text-2xl font-semibold ${r.tone}`}>{r.amount}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <p className="mt-3 flex items-baseline justify-between gap-3 px-1 text-sm text-ink-soft">
+        <span>
+          Not yet billable <span className="text-xs">(video edits awaiting approval)</span>
+        </span>
+        <span className="tabular font-semibold">$400</span>
+      </p>
 
       <div className="mt-4 rounded-xl bg-blue-bg p-4">
         <p className={`${eyebrow} text-blue`}>Agent finding</p>
-        <p className="mt-1 text-sm text-navy">Brand approved the work. Second instalment is overdue.</p>
+        <p className="mt-1 text-sm text-navy">GlowLab approved the Stories. The second $150 instalment is past due.</p>
       </div>
     </figure>
   );
 }
 
-export default function Home() {
+function Hero() {
   return (
-    <div data-full-bleed className="flex flex-col">
-      {/* 01 Hero */}
-      <section className="on-dark bg-navy text-white" aria-labelledby="hero-title">
-        <div className={`${container} grid items-center gap-12 py-16 sm:py-24 lg:grid-cols-[1.15fr_1fr]`}>
-          <div>
-            <p className={`${eyebrow} text-white/70`}>For Indian creators working with global brands</p>
-            <h1 id="hero-title" className="mt-4 text-4xl font-semibold leading-[1.08] text-white sm:text-5xl lg:text-6xl">
-              You did the work. Now get clarity on the money.
-            </h1>
-            <p className="mt-6 max-w-xl text-lg text-white/80">
-              Your contract says one thing. Your payment records tell another. Paidright connects both—so you know what
-              you&apos;ve earned, what&apos;s still unpaid, and what to do next.
-            </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link href={SITE.demoPath} className={btnPrimary}>
-                Try live demo
-              </Link>
-              <a href="#watch" className={btnSecondaryDark}>
-                Watch 3-minute demo
-              </a>
-            </div>
-            <p className="mt-6 max-w-xl text-sm text-white/70">
-              AI understands the agreement. PayPal verifies the payment. You stay in control.
-            </p>
+    <section className="on-dark bg-navy text-white" aria-labelledby="hero-title">
+      {/*
+        Mobile order: headline, CTAs + trust line, summary card, then body copy.
+        From lg up, every item is placed explicitly in a two-column grid.
+      */}
+      <div
+        className={`${container} grid gap-8 py-14 sm:py-20 lg:grid-cols-[1.1fr_1fr] lg:grid-rows-[auto_auto_1fr] lg:gap-x-12 lg:gap-y-6`}
+      >
+        <div className="order-1 lg:col-start-1 lg:row-start-1">
+          <p className={`${eyebrow} text-white/70`}>AI payment agent for global creator deals</p>
+          <h1 id="hero-title" className="mt-4 text-4xl font-semibold leading-[1.08] text-white sm:text-5xl lg:text-6xl">
+            You delivered the work. Did you get paid in full?
+          </h1>
+        </div>
+
+        <p className="order-4 max-w-xl text-lg text-white/80 lg:col-start-1 lg:row-start-2">
+          PaidRight checks your agreement, approved work, and PayPal payments to find money you&apos;re still owed —
+          and helps you follow up.
+        </p>
+
+        <div className="order-2 lg:col-start-1 lg:row-start-3">
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Link href={SITE.demoPath} className={btnPrimary}>
+              Find the missing $150
+            </Link>
+            <a href="#watch" className={btnSecondaryDark}>
+              Watch 3-minute demo
+            </a>
           </div>
-          <HeroCard />
+          <p className="mt-4 text-sm text-white/70">See a PayPal Sandbox workflow. No real money is involved.</p>
         </div>
-      </section>
 
-      {/* 02 Problem */}
-      <section className={`${section} bg-canvas`} aria-labelledby="problem-title">
-        <div className={container}>
-          <SectionNumber n="02" />
-          <h2 id="problem-title" className={`${h2} mt-3 max-w-3xl`}>
-            The work is done. So why is getting paid still complicated?
-          </h2>
-          <p className="mt-4 max-w-2xl text-lg">
-            For an international brand collaboration, the contract might be in a PDF, the approval in an email, and the
-            payment in PayPal. When something is missing, the creator has to piece it all together.
-          </p>
-          <ol className="mt-10 grid gap-4 md:grid-cols-3">
-            {[
-              { t: "Agreement", d: "Deliverables, amounts and due dates — in a PDF." },
-              { t: "Brand approval", d: "A sign-off on the work — in an email thread." },
-              { t: "PayPal payment", d: "Invoices and transactions — in PayPal." },
-            ].map((c, i, all) => (
-              <li key={c.t} className="relative rounded-xl border border-hairline bg-surface p-6">
-                <p className="tabular text-sm font-semibold text-blue">{String(i + 1).padStart(2, "0")}</p>
-                <h3 className="mt-2 text-xl font-semibold">{c.t}</h3>
-                <p className="mt-2 text-ink-soft">{c.d}</p>
-                {i < all.length - 1 && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute -bottom-4 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-hairline bg-canvas text-ink-soft md:-right-4 md:bottom-auto md:left-auto md:top-1/2 md:translate-x-0 md:-translate-y-1/2"
-                  >
-                    <span className="rotate-90 md:rotate-0">→</span>
-                  </span>
-                )}
-              </li>
-            ))}
-          </ol>
-          <p className="mt-10 font-display text-xl font-semibold text-navy">Paidright brings the whole story together.</p>
+        <div className="order-3 lg:col-start-2 lg:row-span-3 lg:row-start-1 lg:self-center">
+          <HeroSummaryCard />
         </div>
-      </section>
+      </div>
+    </section>
+  );
+}
 
-      {/* 03 Story */}
-      <section className={`${section} border-y border-hairline bg-surface`} aria-labelledby="story-title">
-        <div className={container}>
-          <SectionNumber n="03" />
-          <h2 id="story-title" className={`${h2} mt-3 max-w-3xl`}>
-            Meet Aanya. She&apos;s delivered. But hasn&apos;t been fully paid.
-          </h2>
-          <p className="mt-4 max-w-2xl text-lg">
-            Aanya is a Bengaluru-based creator working with a US skincare brand. Her campaign is worth $1,200. She has
-            delivered the approved Stories, but only one of two agreed $150 instalments has been paid.
-          </p>
-          <ol className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              { n: "01", t: "$1,200 campaign agreed", d: null, tone: "border-t-ink-soft" },
-              { n: "02", t: "Stories approved", d: null, tone: "border-t-blue" },
-              { n: "03", t: "$150 paid", d: "First instalment verified via PayPal", tone: "border-t-mint" },
-              { n: "04", t: "$150 overdue", d: "Second invoice past its due date", tone: "border-t-amber" },
-            ].map((b) => (
-              <li key={b.n} className={`rounded-xl border border-hairline border-t-4 bg-canvas p-5 ${b.tone}`}>
-                <p className="tabular text-sm font-semibold text-ink-soft">{b.n}</p>
-                <p className="tabular mt-2 font-display text-xl font-semibold text-navy">{b.t}</p>
-                {b.d && <p className="mt-1 text-sm text-ink-soft">{b.d}</p>}
-              </li>
-            ))}
-          </ol>
-        </div>
-      </section>
+/* 01 ─ Three sources, one timeline. */
+function ThreePlaces() {
+  const steps = [
+    {
+      source: "Contract",
+      title: "What you should earn",
+      lines: [
+        ["Reel", "$500"],
+        ["Three Stories (2 × $150)", "$300"],
+        ["Video edits", "$400"],
+      ],
+      total: ["Agreed", "$1,200"],
+    },
+    {
+      source: "Brand approval",
+      title: "What you delivered",
+      lines: [
+        ["Reel", "Approved"],
+        ["Three Stories", "Approved"],
+        ["Video edits", "Awaiting approval"],
+      ],
+      total: ["Approved work", "$800"],
+    },
+    {
+      source: "PayPal invoices",
+      title: "What was paid",
+      lines: [
+        ["Reel", "Paid $500"],
+        ["Stories instalment 1", "Paid $150"],
+        ["Stories instalment 2", "Overdue $150"],
+      ],
+      total: ["Verified paid", "$650"],
+    },
+  ];
+  return (
+    <section className={`${section} bg-canvas`} aria-labelledby="three-title">
+      <div className={container}>
+        <SectionNumber n="01" />
+        <h2 id="three-title" className={`${h2} mt-3 max-w-3xl`}>
+          One brand deal. Three places to check.
+        </h2>
+        <p className="mt-4 max-w-2xl text-lg">
+          Your contract says what you should earn. Your brand confirms what you delivered. PayPal shows what was paid.
+          PaidRight connects all three.
+        </p>
 
-      {/* 04 How it works */}
-      <section id="how" className={`${section} bg-canvas`} aria-labelledby="how-title">
-        <div className={container}>
-          <SectionNumber n="04" />
-          <h2 id="how-title" className={`${h2} mt-3 max-w-3xl`}>
-            From agreement to payment. One clear workflow.
-          </h2>
-          <div className="mt-10">
-            <HomeWorkflowTabs />
-          </div>
-        </div>
-      </section>
-
-      {/* 05 Aha */}
-      <section className={`${section} border-y border-hairline bg-surface`} aria-labelledby="aha-title">
-        <div className={`${container} grid gap-10 lg:grid-cols-[1fr_1.1fr] lg:items-center`}>
-          <div>
-            <SectionNumber n="05" />
-            <h2 id="aha-title" className={`${h2} mt-3`}>
-              Not just an alert. An answer you can act on.
-            </h2>
-            <p className="mt-4 text-lg">
-              Paidright doesn&apos;t simply flag a late invoice. It connects the evidence and explains what&apos;s
-              missing.
-            </p>
-            <p className="mt-6 font-display text-lg font-semibold text-navy">
-              Every recommendation comes with a reason. Every payment action stays under your control.
-            </p>
-          </div>
-
-          <article aria-label="Example investigation" className="rounded-2xl border border-hairline border-l-4 border-l-amber bg-surface p-6 shadow-[0_16px_40px_-28px_rgba(16,27,43,0.45)]">
-            <p className={`${eyebrow} text-amber-ink`}>Investigation</p>
-            <p className="tabular mt-2 font-display text-2xl font-semibold text-navy">$150 overdue</p>
-            <p className="text-ink-soft">Three Stories, second instalment</p>
-
-            <h3 className={`${eyebrow} mt-6 font-sans text-ink-soft`}>Evidence checked</h3>
-            <ul className="mt-3 space-y-2">
-              {[
-                ["Agreement confirms payment terms", "ok"],
-                ["Brand approved the Stories", "ok"],
-                ["First $150 payment verified", "ok"],
-                ["Second invoice remains unpaid past its due date", "warn"],
-              ].map(([text, tone]) => (
-                <li key={text} className="flex items-start gap-3">
-                  <span
-                    aria-hidden="true"
-                    className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${tone === "ok" ? "bg-mint" : "bg-amber"}`}
-                  >
-                    {tone === "ok" ? "✓" : "!"}
-                  </span>
-                  <span>
-                    <span className="sr-only">{tone === "ok" ? "Confirmed: " : "Issue: "}</span>
-                    {text}
-                  </span>
-                </li>
-              ))}
-            </ul>
-
-            <div className="mt-6 rounded-xl bg-blue-bg p-4">
-              <p className={`${eyebrow} text-blue`}>Agent recommendation</p>
-              <p className="mt-1 text-navy">
-                Send a payment reminder with the invoice and approval evidence attached.
+        <ol className="mt-10 grid gap-4 md:grid-cols-3">
+          {steps.map((s, i) => (
+            <li key={s.source} className={`${card} flex flex-col p-5`}>
+              <p className={`${eyebrow} tabular text-blue`}>
+                {String(i + 1).padStart(2, "0")} · {s.source}
               </p>
+              <h3 className="mt-2 text-lg font-semibold">{s.title}</h3>
+              <ul className="mt-3 flex-1 space-y-1.5 text-sm">
+                {s.lines.map(([k, v]) => (
+                  <li key={k} className="flex justify-between gap-3">
+                    <span className="min-w-0 text-ink-soft">{k}</span>
+                    <span className="tabular shrink-0 text-right font-medium text-navy">{v}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-4 flex justify-between gap-3 border-t border-hairline pt-3 text-sm font-semibold text-navy">
+                <span>{s.total[0]}</span>
+                <span className="tabular">{s.total[1]}</span>
+              </p>
+            </li>
+          ))}
+        </ol>
+
+        <div className="mt-4 flex flex-col gap-2 rounded-xl border border-hairline border-l-4 border-l-amber bg-surface p-5 sm:flex-row sm:items-center sm:justify-between">
+          <p className="font-display text-lg font-semibold text-navy">
+            PaidRight: <span className="tabular">$800</span> approved − <span className="tabular">$650</span> paid ={" "}
+            <span className="tabular text-amber-ink">$150 still owed</span>
+          </p>
+          <p className="text-sm text-ink-soft">
+            The <span className="tabular">$400</span> for edits is not yet billable.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* 02 ─ Three panels that mirror the product UI. */
+function HowItWorks() {
+  return (
+    <section id="how" className={`${section} border-y border-hairline bg-surface`} aria-labelledby="how-title">
+      <div className={container}>
+        <SectionNumber n="02" />
+        <h2 id="how-title" className={`${h2} mt-3 max-w-3xl`}>
+          From completed work to payment clarity.
+        </h2>
+
+        <div className="mt-10 grid gap-6 lg:grid-cols-3">
+          {/* Understand the deal */}
+          <article className="flex flex-col">
+            <h3 className="text-xl font-semibold">Understand the deal</h3>
+            <p className="mt-1 text-ink-soft">AI reads the agreement into terms you confirm.</p>
+            <div className={`${card} mt-4 flex-1 bg-canvas p-4`} role="group" aria-label="Example: agreement terms">
+              <p className={`${eyebrow} text-ink-soft`}>Read from agreement</p>
+              <ul className="mt-3 divide-y divide-hairline text-sm">
+                {[
+                  ["Reel", "$500", "On approval"],
+                  ["Three Stories", "$300", "2 × $150 instalments"],
+                  ["Video edits", "$400", "On approval"],
+                  ["Usage rights extension", "$200", "Per extra 30 days"],
+                ].map(([item, amt, note]) => (
+                  <li key={item} className="flex items-start justify-between gap-3 py-2">
+                    <span className="min-w-0">
+                      <span className="block font-medium text-navy">{item}</span>
+                      <span className="block text-xs text-ink-soft">{note}</span>
+                    </span>
+                    <span className="tabular shrink-0 font-semibold text-navy">{amt}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </article>
+
+          {/* Check the money */}
+          <article className="flex flex-col">
+            <h3 className="text-xl font-semibold">Check the money</h3>
+            <p className="mt-1 text-ink-soft">PayPal confirms what each invoice shows.</p>
+            <div className={`${card} mt-4 flex-1 bg-canvas p-4`} role="group" aria-label="Example: PayPal invoice statuses">
+              <p className={`${eyebrow} text-ink-soft`}>PayPal Sandbox invoices</p>
+              <ul className="mt-3 divide-y divide-hairline text-sm">
+                {(
+                  [
+                    ["Reel", "$500", "paid"],
+                    ["Stories · instalment 1", "$150", "paid"],
+                    ["Stories · instalment 2", "$150", "overdue"],
+                  ] as const
+                ).map(([item, amt, tone]) => (
+                  <li key={item} className="flex items-center justify-between gap-3 py-2.5">
+                    <span className="min-w-0">
+                      <span className="block font-medium text-navy">{item}</span>
+                      <span className="tabular block text-xs text-ink-soft">{amt} USD</span>
+                    </span>
+                    <Pill tone={tone} />
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3 text-xs text-ink-soft">Status read from PayPal on request.</p>
+            </div>
+          </article>
+
+          {/* Fix the gap */}
+          <article className="flex flex-col">
+            <h3 className="text-xl font-semibold">Fix the gap</h3>
+            <p className="mt-1 text-ink-soft">You review and approve every reminder.</p>
+            <div
+              className={`${card} mt-4 flex flex-1 flex-col border-l-4 border-l-amber bg-canvas p-4`}
+              role="group"
+              aria-label="Example: agent finding"
+            >
+              <p className={`${eyebrow} text-amber-ink`}>Finding</p>
+              <p className="tabular mt-1 font-display text-2xl font-semibold text-navy">$150 overdue</p>
+              <p className="text-sm text-ink-soft">Stories, instalment 2</p>
+              <p className="mt-3 flex-1 text-sm">
+                GlowLab approved the Stories. PayPal shows this invoice unpaid past its due date.
+              </p>
+              <Link
+                href={SITE.demoPath}
+                className="mt-4 inline-flex h-10 items-center justify-center rounded-[10px] bg-blue px-4 text-sm font-semibold text-white hover:bg-blue-strong"
+              >
+                Review reminder
+              </Link>
             </div>
           </article>
         </div>
-      </section>
+      </div>
+    </section>
+  );
+}
 
-      {/* 06 Why PayPal */}
-      <section className={`${section} bg-canvas`} aria-labelledby="paypal-title">
-        <div className={container}>
-          <SectionNumber n="06" />
-          <h2 id="paypal-title" className={`${h2} mt-3 max-w-3xl`}>
-            Built around PayPal. Not just connected to it.
+/* 03 ─ The investigation, in amount → status → reason → action order. */
+function Investigation() {
+  const rows: { label: string; amount: string; tone: Tone; reason: string }[] = [
+    { label: "Three Stories", amount: "$300", tone: "approved", reason: "GlowLab approved all three Stories." },
+    { label: "Instalment 1", amount: "$150", tone: "paid", reason: "Separate PayPal invoice, verified paid." },
+    { label: "Instalment 2", amount: "$150", tone: "overdue", reason: "Separate PayPal invoice, unpaid past due." },
+  ];
+  return (
+    <section className={`${section} bg-canvas`} aria-labelledby="why-title">
+      <div className={`${container} grid gap-10 lg:grid-cols-[1fr_1.1fr] lg:items-center`}>
+        <div>
+          <SectionNumber n="03" />
+          <h2 id="why-title" className={`${h2} mt-3`}>
+            The invoice says unpaid. PaidRight explains why.
           </h2>
-          <p className="mt-4 max-w-2xl text-lg">
-            PayPal handles the payment. Paidright connects that payment to the agreement and work behind it.
+          <p className="mt-4 text-lg">
+            The work was approved. Half the Stories fee arrived. The second instalment did not.
           </p>
-          <div className="mt-10 overflow-hidden rounded-xl border border-hairline bg-surface">
-            <table className="w-full table-fixed border-collapse text-left">
-              <thead>
-                <tr className="border-b border-hairline bg-muted-bg">
-                  <th scope="col" className={`${eyebrow} w-1/2 px-4 py-3 text-ink-soft sm:px-6`}>
-                    PayPal provides
-                  </th>
-                  <th scope="col" className={`${eyebrow} w-1/2 border-l border-hairline px-4 py-3 text-blue sm:px-6`}>
-                    Paidright adds
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-hairline align-top">
-                {[
-                  ["Invoice creation and sending", "Which approved milestone the invoice represents"],
-                  ["Payment status and transaction records", "Whether the paid amount matches the agreed schedule"],
-                  ["Invoice reminders", "A recommended, evidence-backed reason to follow up"],
-                  ["International payment infrastructure", "A clear creator view of outstanding receivables"],
-                ].map(([pp, pr]) => (
-                  <tr key={pp}>
-                    <td className="break-words px-4 py-4 text-sm sm:px-6 sm:text-base">{pp}</td>
-                    <td className="break-words border-l border-hairline px-4 py-4 text-sm font-medium text-navy sm:px-6 sm:text-base">
-                      {pr}
-                    </td>
-                  </tr>
+          <Link href={SITE.demoPath} className={`${btnPrimary} mt-8`}>
+            Try this investigation
+          </Link>
+        </div>
+
+        <article
+          aria-label="Example investigation"
+          className="min-w-0 rounded-2xl border border-hairline bg-surface p-5 shadow-[0_16px_40px_-28px_rgba(16,27,43,0.45)] sm:p-6"
+        >
+          <p className={`${eyebrow} text-amber-ink`}>Investigation</p>
+          <p className="tabular mt-2 font-display text-3xl font-semibold text-navy">$150 still owed</p>
+          <p className="text-ink-soft">Three Stories, second instalment</p>
+
+          <ol className="mt-6 space-y-3">
+            {rows.map((r) => (
+              <li key={r.label} className="rounded-xl border border-hairline p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-medium text-navy">
+                    <span className="tabular font-display text-lg font-semibold">{r.amount}</span>{" "}
+                    <span className="text-ink-soft">· {r.label}</span>
+                  </p>
+                  <Pill tone={r.tone} />
+                </div>
+                <p className="mt-1 text-sm text-ink-soft">{r.reason}</p>
+              </li>
+            ))}
+          </ol>
+
+          <div className="mt-5 rounded-xl bg-blue-bg p-4">
+            <p className={`${eyebrow} text-blue`}>Recommended action</p>
+            <p className="mt-1 text-navy">Send a PayPal reminder for instalment 2. You approve it first.</p>
+          </div>
+        </article>
+      </div>
+    </section>
+  );
+}
+
+/* 04 ─ Division of labour between PayPal and PaidRight. */
+function PayPalAndAi() {
+  const cols = [
+    {
+      title: "PayPal",
+      tone: "text-ink-soft",
+      items: ["Invoice creation and sending", "Payment status", "Reminders"],
+    },
+    {
+      title: "PaidRight",
+      tone: "text-blue",
+      items: ["Contract interpretation", "Milestone matching", "Evidence-backed recommendations"],
+    },
+  ];
+  return (
+    <section className={`${section} border-y border-hairline bg-surface`} aria-labelledby="paypal-title">
+      <div className={container}>
+        <SectionNumber n="04" />
+        <h2 id="paypal-title" className={`${h2} mt-3 max-w-3xl`}>
+          PayPal confirms the payment. AI understands what it was for.
+        </h2>
+        <div className="mt-10 grid gap-4 md:grid-cols-2">
+          {cols.map((c) => (
+            <div key={c.title} className={`${card} bg-canvas p-6`}>
+              <h3 className={`${eyebrow} font-sans ${c.tone}`}>{c.title}</h3>
+              <ul className="mt-4 space-y-3">
+                {c.items.map((it) => (
+                  <li key={it} className="flex items-start gap-3 text-lg font-medium text-navy">
+                    <span aria-hidden="true" className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-50" />
+                    {it}
+                  </li>
                 ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="mt-4 text-sm text-ink-soft">The demo uses PayPal Sandbox. No real money is transferred.</p>
+              </ul>
+            </div>
+          ))}
         </div>
-      </section>
+        <p className="mt-4 text-sm text-ink-soft">
+          Money arithmetic runs in code, not in the model. The demo uses PayPal Sandbox; no real money moves.
+        </p>
+      </div>
+    </section>
+  );
+}
 
-      {/* 07 Watch */}
-      <section id="watch" className={`${section} border-y border-hairline bg-surface`} aria-labelledby="watch-title">
-        <div className={container}>
-          <SectionNumber n="07" />
-          <h2 id="watch-title" className={`${h2} mt-3 max-w-3xl`}>
-            Three minutes. One real payment problem.
-          </h2>
-          <p className="mt-4 max-w-2xl text-lg">
-            Watch Paidright turn a creator&apos;s agreement into a payment plan, verify a PayPal sandbox transaction,
-            and investigate an overdue amount.
-          </p>
-          <div className="mx-auto mt-10 max-w-4xl">
-            <HomeVideo />
-          </div>
+/* 05 ─ Video, source and technology. */
+function WatchAndTest() {
+  return (
+    <section id="watch" className={`${section} bg-canvas`} aria-labelledby="watch-title">
+      <div className={container}>
+        <SectionNumber n="05" />
+        <h2 id="watch-title" className={`${h2} mt-3 max-w-3xl`}>
+          See the whole product. Test the real build.
+        </h2>
+        <div className="mt-10 grid gap-8 lg:grid-cols-[1.6fr_1fr] lg:items-start">
+          <HomeVideo />
+          <ul className="grid gap-4">
+            <li>
+              <External href={SITE.githubUrl} className={`${card} block p-5 hover:border-navy`}>
+                <span className="block font-display text-lg font-semibold text-navy">GitHub repository</span>
+                <span className="mt-1 block text-sm text-ink-soft">Source code, README and setup steps.</span>
+              </External>
+            </li>
+            <li>
+              <Link href={SITE.technologyPath} className={`${card} block p-5 hover:border-navy`}>
+                <span className="block font-display text-lg font-semibold text-navy">Technology</span>
+                <span className="mt-1 block text-sm text-ink-soft">
+                  PayPal API calls, money rules, and known limitations.
+                </span>
+              </Link>
+            </li>
+          </ul>
         </div>
-      </section>
+      </div>
+    </section>
+  );
+}
 
-      {/* 08 Final CTA + footer */}
-      <section className="on-dark bg-navy text-white" aria-labelledby="final-title">
-        <div className={`${container} py-16 sm:py-24`}>
-          <SectionNumber n="08" dark />
-          <h2 id="final-title" className={`${h2} mt-3 max-w-3xl text-white`}>
-            Creativity crosses borders. Payment clarity should too.
-          </h2>
-          <p className="mt-4 max-w-2xl text-lg text-white/80">
-            Paidright gives independent creators a clearer view of what they&apos;ve earned, what&apos;s been paid, and
-            what needs attention.
-          </p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Link href={SITE.demoPath} className={btnPrimary}>
-              Experience Paidright
-            </Link>
-            <External href={SITE.githubUrl} className={btnSecondaryDark}>
-              Explore how we built it
-            </External>
-          </div>
-        </div>
-      </section>
-
-      <footer className="on-dark border-t border-white/15 bg-navy">
+function FinalCta() {
+  return (
+    <section className="on-dark bg-navy text-white" aria-labelledby="final-title">
+      <div className={`${container} flex flex-col gap-6 py-16 sm:py-20 md:flex-row md:items-center md:justify-between`}>
+        <h2 id="final-title" className={`${h2} text-white`}>
+          Stop guessing what&apos;s owed.
+        </h2>
+        <Link href={SITE.demoPath} className={btnPrimary}>
+          Try live demo
+        </Link>
+      </div>
+      <div className="border-t border-white/15">
         <div className={`${container} flex flex-col gap-4 py-8 text-sm text-white/70 md:flex-row md:items-center md:justify-between`}>
-          <p>Built with PayPal&apos;s developer platform and AI. Fictional demo data; PayPal Sandbox only.</p>
+          <p>GlowLab and Aanya are fictional. PayPal Sandbox only.</p>
           <ul className="flex flex-wrap gap-x-6 gap-y-2">
+            <li>
+              <Link href={SITE.technologyPath} className="text-white underline-offset-4 hover:underline">
+                Technology
+              </Link>
+            </li>
             <li>
               <External href={SITE.githubUrl} className="text-white underline-offset-4 hover:underline">
                 GitHub
@@ -324,12 +466,26 @@ export default function Home() {
             </li>
             <li>
               <Link href="/new" className="text-white underline-offset-4 hover:underline">
-                Create a deal from your own contract
+                Add your own deal
               </Link>
             </li>
           </ul>
         </div>
-      </footer>
+      </div>
+    </section>
+  );
+}
+
+export default function Home() {
+  return (
+    <div data-full-bleed className="flex flex-col">
+      <Hero />
+      <ThreePlaces />
+      <HowItWorks />
+      <Investigation />
+      <PayPalAndAi />
+      <WatchAndTest />
+      <FinalCta />
     </div>
   );
 }

@@ -1,18 +1,67 @@
 "use client";
 
-import { useState } from "react";
 import { addDays, money, moneyShort } from "@/lib/format";
 import { computeGap, instalmentPaid, isInstalmentOverdue, isInstalmentPaid } from "@/lib/gap";
 import type { Deal, Deliverable, Gap, Instalment } from "@/lib/types";
-import { createInvoice, PAYPAL_COPY, patchInstalmentInvoice, refreshInvoice, type UpdateDeal } from "./dealOps";
+import {
+  canShowPayLink,
+  createInvoice,
+  PAYPAL_COPY,
+  patchInstalmentInvoice,
+  wasChecked,
+  type UpdateDeal,
+} from "./dealOps";
 import { InvoiceCell } from "./InvoiceCell";
-import { Button, GapBadge } from "./ui";
+import { Button, ErrorText } from "./ui";
 import { useAction } from "./useAction";
 
 export function gapBadgeLabel(gap: Gap, currency: Deal["currency"]): string | undefined {
   if (gap.gapClass !== "OVERDUE") return undefined;
   const days = gap.daysOverdue ?? 0;
   return `${moneyShort(gap.overdueMinor, currency)} overdue · ${days} day${days === 1 ? "" : "s"}`;
+}
+
+export type StatusTone = "paid" | "overdue" | "open" | "waiting";
+
+export const statusToneClass: Record<StatusTone, string> = {
+  paid: "bg-mint-bg text-mint",
+  overdue: "bg-amber-bg text-amber-ink",
+  open: "bg-blue-bg text-blue-strong",
+  waiting: "bg-muted-bg text-ink-soft",
+};
+
+// One plain-language status per deliverable. "Overdue" is only claimed once
+// PayPal has confirmed the overdue invoice; until then it is "pending verification".
+export function deliverableStatus(d: Deliverable, gap: Gap, deal: Deal): { label: string; tone: StatusTone } {
+  const cur = deal.currency;
+  const approved = d.status === "approved";
+  switch (gap.gapClass) {
+    case "PAID":
+      return { label: "Paid", tone: "paid" };
+    case "OVERDUE": {
+      const late = d.instalments.find((i) => i.id === gap.overdueInstalmentId);
+      if (!wasChecked(late?.invoice?.lastRefreshedAt)) return { label: "Pending PayPal verification", tone: "waiting" };
+      return { label: `${approved ? "Approved, " : ""}${moneyShort(gap.overdueMinor, cur)} overdue`, tone: "overdue" };
+    }
+    case "NOT_INVOICED":
+      return { label: "Approved, not invoiced", tone: "open" };
+    case "UNDERPAID":
+      return { label: `${approved ? "Approved, " : ""}${moneyShort(gap.dueMinor, cur)} not yet due`, tone: "open" };
+    case "UNPAID":
+      return { label: `${approved ? "Approved, " : ""}awaiting payment`, tone: "open" };
+    case "NOT_DUE":
+      return d.status === "submitted"
+        ? { label: "Awaiting approval", tone: "waiting" }
+        : { label: "Not delivered yet", tone: "waiting" };
+  }
+}
+
+export function StatusPill({ label, tone }: { label: string; tone: StatusTone }) {
+  return (
+    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusToneClass[tone]}`}>
+      {label}
+    </span>
+  );
 }
 
 export function DeliverableRow({
@@ -27,7 +76,7 @@ export function DeliverableRow({
   update: UpdateDeal;
 }) {
   const gap = computeGap(d, today);
-  const pct = d.amountMinor > 0 ? Math.round((gap.paidMinor / d.amountMinor) * 100) : 0;
+  const status = deliverableStatus(d, gap, deal);
   const patch = (p: Partial<Deliverable>) =>
     update((deal) => ({ ...deal, deliverables: deal.deliverables.map((x) => (x.id === d.id ? { ...x, ...p } : x)) }));
 
@@ -38,40 +87,58 @@ export function DeliverableRow({
     control = <Button onClick={() => patch({ status: "approved", approvedAt: today })}>Mark approved</Button>;
   }
 
+  const quotes = [
+    d.sourceQuote ? { label: "Deliverable and fee", text: d.sourceQuote } : null,
+    ...d.instalments.map((i) => (i.sourceQuote ? { label: i.label, text: i.sourceQuote } : null)),
+  ].filter((q): q is { label: string; text: string } => q !== null);
+
   return (
-    <>
-      <tr className="border-t border-line align-top">
-        <td className="pt-3 pb-2 pr-3 font-medium">{d.name}</td>
-        <td className="pt-3 pb-2 pr-3 text-right tabular-nums">{money(d.amountMinor, deal.currency)}</td>
-        <td className="pt-3 pb-2 pr-3">
-          <span className="capitalize">{d.status}</span>
-          {d.approvedAt && <span className="block text-xs text-ink-soft">on {d.approvedAt}</span>}
-          {d.status === "submitted" && <span className="mt-1 block text-xs text-ink-soft">{PAYPAL_COPY.submitted}</span>}
-        </td>
-        <td className="pt-3 pb-2 pr-3" />
-        <td className="pt-3 pb-2 pr-3 text-right">
-          <span className="font-medium tabular-nums">{pct}% paid</span>
-          <span className="block text-xs text-ink-soft tabular-nums">
-            {moneyShort(gap.paidMinor, deal.currency)} of {moneyShort(d.amountMinor, deal.currency)}
-          </span>
-        </td>
-        <td className="pt-3 pb-2 pr-3">
-          <GapBadge gapClass={gap.gapClass} label={gapBadgeLabel(gap, deal.currency)} />
-        </td>
-        <td className="pt-3 pb-2 text-right">{control}</td>
-      </tr>
-      {d.instalments.map((inst, idx) => (
-        <InstalmentRow
-          key={inst.id}
-          deal={deal}
-          deliverable={d}
-          instalment={inst}
-          index={idx}
-          today={today}
-          update={update}
-        />
-      ))}
-    </>
+    <li className="rounded-card border border-line bg-paper p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="min-w-0">
+          <h3 className="font-semibold text-ink">{d.name}</h3>
+          <p className="mt-0.5 text-sm text-ink-soft">
+            {d.status === "approved" && d.approvedAt
+              ? `Approved by the brand on ${d.approvedAt}`
+              : d.status === "submitted"
+                ? PAYPAL_COPY.submitted
+                : "Not delivered yet."}
+          </p>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <span className="text-xl font-semibold text-navy tabular-nums">{moneyShort(d.amountMinor, deal.currency)}</span>
+          <StatusPill {...status} />
+        </div>
+      </div>
+
+      <ul className="mt-3 flex flex-col divide-y divide-line border-t border-line">
+        {d.instalments.map((inst) => (
+          <InstalmentRow key={inst.id} deal={deal} deliverable={d} instalment={inst} today={today} update={update} />
+        ))}
+      </ul>
+
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <details className="group min-w-0 flex-1 text-sm">
+          <summary className="cursor-pointer font-medium text-accent underline-offset-4 hover:underline">
+            View evidence
+          </summary>
+          <div className="mt-2 flex flex-col gap-2 rounded-md bg-muted-bg p-3">
+            {quotes.length === 0 ? (
+              <p className="text-ink-soft">No exact clause was linked. Check the full agreement below.</p>
+            ) : (
+              quotes.map((q) => (
+                <figure key={q.label}>
+                  <figcaption className="text-xs font-semibold tracking-wide text-ink-soft uppercase">{q.label}</figcaption>
+                  <blockquote className="mt-0.5 border-l-2 border-accent pl-2 text-ink italic">&ldquo;{q.text}&rdquo;</blockquote>
+                </figure>
+              ))
+            )}
+            {d.approvedAt && <p className="text-xs text-ink-soft">Brand approval recorded on {d.approvedAt}.</p>}
+          </div>
+        </details>
+        {control}
+      </div>
+    </li>
   );
 }
 
@@ -79,28 +146,34 @@ function InstalmentRow({
   deal,
   deliverable: d,
   instalment: inst,
-  index,
   today,
   update,
 }: {
   deal: Deal;
   deliverable: Deliverable;
   instalment: Instalment;
-  index: number;
   today: string;
   update: UpdateDeal;
 }) {
   const action = useAction();
   const inv = inst.invoice;
+  const unclearDue = inst.dueOffsetDays == null && deal.terms.paymentDays == null;
   const offset = inst.dueOffsetDays ?? deal.terms.paymentDays ?? 30;
-  const paid = instalmentPaid(inst);
-  const overdue = isInstalmentOverdue(inst, today);
-  const last = index === d.instalments.length - 1;
+  const paid = isInstalmentPaid(inst);
+  const overdue = isInstalmentOverdue(inst, today) && wasChecked(inv?.lastRefreshedAt);
 
-  let due: React.ReactNode;
-  if (inv?.dueDate) due = <>due {inv.dueDate}</>;
-  else if (d.approvedAt) due = <>due ~{addDays(d.approvedAt, offset)}</>;
-  else due = offset === 0 ? "on approval" : `${offset} days after approval`;
+  let due: string;
+  if (inv?.dueDate) due = `Due ${inv.dueDate}`;
+  else if (unclearDue) due = PAYPAL_COPY.noDueDate;
+  else if (d.approvedAt) due = `Due about ${addDays(d.approvedAt, offset)}`;
+  else due = offset === 0 ? "Due on approval" : `Due ${offset} days after approval`;
+
+  let state: string;
+  if (paid) state = "Paid";
+  else if (overdue) state = `${moneyShort(inst.amountMinor - instalmentPaid(inst), deal.currency)} overdue`;
+  else if (inv) state = "Invoiced, not paid yet";
+  else if (d.status === "approved") state = "Not invoiced";
+  else state = "Not yet billable";
 
   const onInvoice = () =>
     action.run(async () => {
@@ -109,66 +182,29 @@ function InstalmentRow({
       update((x) => patchInstalmentInvoice(x, d.id, inst.id, () => invoice));
     });
 
-  const [checked, setChecked] = useState(false);
-  const onRefresh = () => {
-    setChecked(false);
-    return action.run(async () => {
-      await refreshInvoice(inv!.paypalInvoiceId, update);
-      setChecked(true);
-    });
-  };
-
-  let control: React.ReactNode = null;
-  if (inv) {
-    control = (
-      <Button loading={action.loading} onClick={onRefresh}>
-        {PAYPAL_COPY.check}
-      </Button>
-    );
-  } else if (d.status === "approved") {
-    control = (
-      <Button variant="primary" loading={action.loading} disabled={!deal.brandEmail} onClick={onInvoice}>
-        Create PayPal invoice
-      </Button>
-    );
-  }
-
-  const cell = `py-2 pr-3 ${last ? "pb-3" : ""}`;
   return (
-    <tr className="align-top text-xs">
-      <td className={`${cell} pl-4`}>
-        <span className="border-l-2 border-line pl-2 text-ink">{inst.label}</span>
-        {inst.sourceQuote && <span className="mt-1 block pl-3 text-ink-soft italic">&ldquo;{inst.sourceQuote}&rdquo;</span>}
-      </td>
-      <td className={`${cell} text-right tabular-nums`}>{money(inst.amountMinor, deal.currency)}</td>
-      <td className={`${cell} tabular-nums ${overdue ? "font-semibold text-[#C57630]" : "text-ink-soft"}`}>{due}</td>
-      <td className={cell}>
-        <InvoiceCell invoice={inv} emptyText={PAYPAL_COPY.noInvoice} />
-      </td>
-      <td className={`${cell} text-right tabular-nums`}>{inv ? money(paid, deal.currency) : "—"}</td>
-      <td className={cell}>
-        {isInstalmentPaid(inst) ? (
-          <span className="text-[#188B77]">Paid</span>
-        ) : overdue ? (
-          <span className="font-semibold text-[#C57630]">{PAYPAL_COPY.overdue}</span>
-        ) : inv ? (
-          <span className="text-ink-soft">{PAYPAL_COPY.sentUnpaid}</span>
-        ) : null}
-      </td>
-      <td className={`${cell} text-right`}>
-        {control}
-        <p role="status" aria-live="polite" className="mt-1 text-xs">
-          {action.loading && inv ? (
-            <span className="text-ink-soft">{PAYPAL_COPY.checking}</span>
-          ) : action.error ? (
-            <span className="text-[#C57630]" title={action.error}>
-              {inv ? PAYPAL_COPY.failed : action.error}
-            </span>
-          ) : checked ? (
-            <span className="text-[#188B77]">{PAYPAL_COPY.updated}</span>
-          ) : null}
+    <li className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 py-3 text-sm">
+      <div className="min-w-0">
+        <p className="font-medium text-ink">
+          {inst.label} · <span className="tabular-nums">{moneyShort(inst.amountMinor, deal.currency)}</span>
         </p>
-      </td>
-    </tr>
+        <p className={`text-xs tabular-nums ${overdue ? "font-semibold text-amber-ink" : "text-ink-soft"}`}>
+          {due} · {state}
+        </p>
+        {inv && (
+          <div className="mt-1">
+            <InvoiceCell invoice={inv} showPayLink={canShowPayLink(deal, inv)} />
+          </div>
+        )}
+      </div>
+      {!inv && d.status === "approved" && (
+        <div className="flex flex-col items-end">
+          <Button variant="primary" loading={action.loading} disabled={!deal.brandEmail} onClick={onInvoice}>
+            Create PayPal invoice
+          </Button>
+          <ErrorText error={action.error} />
+        </div>
+      )}
+    </li>
   );
 }

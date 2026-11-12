@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { moneyShort } from "@/lib/format";
 import { computeGap, instalmentPaid, isInstalmentOverdue } from "@/lib/gap";
-import type { Currency, Deal, Minor } from "@/lib/types";
-import { wasChecked } from "./dealOps";
+import type { Deal, InvoiceRef, Minor } from "@/lib/types";
+import { brandShort, PAYPAL_COPY, shortDeliverableName, wasChecked } from "./dealOps";
 
 // Every unpaid cent lands in exactly one bucket, so the tiles always add up to
 // the deal total: paid + overdue + awaiting + readyToInvoice + notBillable.
@@ -36,14 +36,15 @@ export function computeBuckets(deal: Deal, today: string): Buckets {
     paidMinor += gap.paidMinor;
     overdueMinor += gap.overdueMinor;
     const multi = d.instalments.length > 1;
+    const name = shortDeliverableName(d.name);
     let unapproved = 0;
     for (const i of d.instalments) {
       const paid = instalmentPaid(i);
       const rest = i.amountMinor - paid;
-      if (paid > 0) paidParts.push(`${moneyShort(paid, cur)} ${d.name}${multi ? ` ${i.label.toLowerCase()}` : ""}`);
+      if (paid > 0) paidParts.push(`${moneyShort(paid, cur)} ${name}${multi ? ` ${i.label.toLowerCase()}` : ""}`);
       if (rest <= 0) continue;
       if (isInstalmentOverdue(i, today)) {
-        overdueParts.push(`${d.name}${multi ? ` · ${i.label}` : ""} after due date`);
+        overdueParts.push(`${name}${multi ? ` · ${i.label}` : ""} after due date`);
       } else if (i.invoice) {
         awaitingMinor += rest;
       } else if (d.status === "approved") {
@@ -80,14 +81,23 @@ export function relativeTime(iso: string, nowMs: number): string {
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
-function oldestCheck(deal: Deal): string | null {
-  const stamps = [
-    ...deal.deliverables.flatMap((d) => d.instalments.map((i) => i.invoice?.lastRefreshedAt)),
-    ...deal.changeOrders.map((c) => c.invoice?.lastRefreshedAt),
+function allInvoices(deal: Deal): InvoiceRef[] {
+  return [
+    ...deal.deliverables.flatMap((d) => d.instalments.flatMap((i) => (i.invoice ? [i.invoice] : []))),
+    ...deal.changeOrders.flatMap((c) => (c.invoice ? [c.invoice] : [])),
   ];
-  const all = stamps.filter((s): s is string => s !== undefined);
-  if (all.length === 0 || !all.every((s) => wasChecked(s))) return null;
-  return all.reduce((a, b) => (Date.parse(a) <= Date.parse(b) ? a : b));
+}
+
+// Oldest verification time across every invoice, or null if any was never checked.
+function oldestCheck(deal: Deal): string | null {
+  const stamps = allInvoices(deal).map((i) => i.lastRefreshedAt);
+  if (stamps.length === 0 || !stamps.every((s) => wasChecked(s))) return null;
+  return stamps.reduce((a, b) => (Date.parse(a) <= Date.parse(b) ? a : b));
+}
+
+// True when at least one invoice on the deal has never been confirmed by PayPal.
+export function hasUnverifiedInvoices(deal: Deal): boolean {
+  return allInvoices(deal).some((i) => !wasChecked(i.lastRefreshedAt));
 }
 
 function useNow(): number {
@@ -99,180 +109,267 @@ function useNow(): number {
   return now;
 }
 
+const COUNT_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+const countWord = (n: number) => COUNT_WORDS[n] ?? String(n);
+
 interface OverdueItem {
   deliverableId: string;
   sentence: string;
   count: number;
+  amountMinor: Minor;
 }
 
-function overdueItems(deal: Deal, today: string): OverdueItem[] {
+// Overdue instalments PayPal has confirmed (checked at least once). Seeded,
+// never-checked invoices are "pending verification", never "overdue".
+export function verifiedOverdueItems(deal: Deal, today: string): OverdueItem[] {
   const cur = deal.currency;
+  const brand = brandShort(deal.brand);
   return deal.deliverables.flatMap((d) => {
-    const gap = computeGap(d, today);
-    if (gap.gapClass !== "OVERDUE") return [];
-    const late = d.instalments.filter((i) => isInstalmentOverdue(i, today));
-    const what = late
-      .map((i) => `${i.label.toLowerCase()} of ${moneyShort(i.amountMinor - instalmentPaid(i), cur)}`)
-      .join(" and ");
-    const verb = late.length === 1 ? "is" : "are";
-    const lead = d.status === "approved" ? `The brand approved your ${d.name}, but ` : `For your ${d.name}, `;
-    return [
-      {
-        deliverableId: d.id,
-        sentence: `${lead}${what} ${verb} overdue. Paidright has prepared a review.`,
-        count: late.length,
-      },
-    ];
+    const late = d.instalments.filter((i) => isInstalmentOverdue(i, today) && wasChecked(i.invoice?.lastRefreshedAt));
+    if (late.length === 0) return [];
+    const amountMinor = late.reduce((s, i) => s + i.amountMinor - instalmentPaid(i), 0);
+    const what =
+      late.length === 1
+        ? `one ${moneyShort(amountMinor, cur)} payment is overdue`
+        : `${countWord(late.length)} payments totalling ${moneyShort(amountMinor, cur)} are overdue`;
+    const name = shortDeliverableName(d.name);
+    const sentence =
+      d.status === "approved" ? `${brand} approved the ${name}, but ${what}.` : `For the ${name}, ${what}.`;
+    return [{ deliverableId: d.id, sentence, count: late.length, amountMinor }];
   });
 }
 
-function scrollToAndFocus(id: string, fallbackId?: string) {
-  const el = document.getElementById(id) ?? (fallbackId ? document.getElementById(fallbackId) : null);
-  if (!el) return;
-  el.scrollIntoView({ behavior: "smooth", block: "start" });
-  if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
-  el.focus({ preventScroll: true });
-}
+type Source = "paypal" | "unverified" | "agreement" | "none";
 
-function brandShort(brand: string): string {
-  return brand.replace(/,?\s+(Inc|LLC|Ltd|Corp|Co)\.?$/i, "").trim();
-}
-
-type Tone = "navy" | "mint" | "amber" | "slate";
-
-const toneClass: Record<Tone, string> = {
-  navy: "border-[#DCE2E9] bg-white text-[#101B2B]",
-  mint: "border-[#188B77]/30 bg-[#188B77]/5 text-[#188B77]",
-  amber: "border-[#C57630]/40 bg-[#C57630]/5 text-[#C57630]",
-  slate: "border-[#DCE2E9] bg-[#F7F8F5] text-[#1B2839]",
+const sourceCopy: Record<Source, string> = {
+  paypal: "Verified by PayPal",
+  unverified: "Not yet verified",
+  agreement: "From agreement",
+  none: "No invoices yet",
 };
 
-function Tile({
+const sourceClass: Record<Source, string> = {
+  paypal: "bg-mint-bg text-mint",
+  unverified: "bg-amber-bg text-amber-ink",
+  agreement: "bg-muted-bg text-ink-soft",
+  none: "bg-muted-bg text-ink-soft",
+};
+
+function Metric({
   label,
   amount,
-  currency,
+  deal,
   detail,
-  tone,
+  source,
+  emphasis,
+  pending = false,
 }: {
   label: string;
   amount: Minor;
-  currency: Currency;
+  deal: Deal;
   detail: string;
-  tone: Tone;
+  source: Source;
+  emphasis?: "mint" | "amber";
+  pending?: boolean;
 }) {
+  const amountClass = emphasis === "mint" ? "text-mint" : emphasis === "amber" ? "text-amber-ink" : "text-navy";
   return (
-    <div className={`flex flex-col gap-1 rounded-xl border p-4 ${toneClass[tone]}`}>
-      <span className="text-xs font-semibold tracking-wide text-[#1B2839]/70 uppercase">{label}</span>
-      <span className="text-2xl font-semibold tabular-nums">{moneyShort(amount, currency)}</span>
-      <span className="text-xs leading-snug text-[#1B2839]/75">{detail}</span>
+    <div className="flex min-w-0 flex-col gap-1 rounded-card border border-line bg-paper p-4">
+      <span className="text-xs font-semibold tracking-wide text-ink-soft uppercase">{label}</span>
+      {pending ? (
+        <span className="text-base font-medium text-ink-soft">Checking with PayPal…</span>
+      ) : (
+        <>
+          <span className={`text-2xl font-semibold tabular-nums ${amountClass}`}>{moneyShort(amount, deal.currency)}</span>
+          <span className="text-xs leading-snug text-ink-soft">{detail}</span>
+          <span className={`mt-1 w-fit rounded-full px-2 py-0.5 text-[11px] font-semibold ${sourceClass[source]}`}>
+            {sourceCopy[source]}
+          </span>
+        </>
+      )}
     </div>
   );
 }
 
-export function Overview({ deal, today, checking }: { deal: Deal; today: string; checking: boolean }) {
+function sourceFor(invoices: InvoiceRef[]): Source {
+  if (invoices.length === 0) return "none";
+  return invoices.every((i) => wasChecked(i.lastRefreshedAt)) ? "paypal" : "unverified";
+}
+
+const btnPrimary =
+  "inline-flex items-center justify-center gap-2 rounded-[10px] border border-blue bg-blue px-4 py-2 text-sm font-semibold text-white hover:bg-blue-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue disabled:opacity-60";
+
+export function Overview({
+  deal,
+  today,
+  checking,
+  checkError = null,
+  onInvestigate,
+  onCheckAll,
+}: {
+  deal: Deal;
+  today: string;
+  checking: boolean;
+  checkError?: string | null;
+  onInvestigate?: () => void;
+  onCheckAll?: () => void;
+}) {
   const now = useNow();
   const cur = deal.currency;
   const b = computeBuckets(deal, today);
-  const items = overdueItems(deal, today);
+  const items = verifiedOverdueItems(deal, today);
   const lateCount = items.reduce((s, i) => s + i.count, 0);
+  const overdueVerified = items.reduce((s, i) => s + i.amountMinor, 0);
+  const pendingCheck = b.overdueMinor - overdueVerified;
+  const unverified = hasUnverifiedInvoices(deal);
   const lastCheck = oldestCheck(deal);
-  const firstName = deal.creator.trim().split(/\s+/)[0] || deal.creator;
 
-  return (
-    <section aria-labelledby="overview-title" className="flex flex-col gap-4 text-[#1B2839]">
-      <div>
-        <h1 id="overview-title" className="font-serif text-3xl text-[#101B2B]">
-          {firstName} × {brandShort(deal.brand)}
-        </h1>
-        <p className="mt-1 text-sm text-[#1B2839]/70">
-          Campaign overview · Currency: {cur} · Status: Active
+  const approved = deal.deliverables.filter((d) => d.status === "approved");
+  const approvedMinor = approved.reduce((s, d) => s + d.amountMinor, 0);
+  const instalments = deal.deliverables.flatMap((d) => d.instalments);
+  const invoiced = instalments.flatMap((i) => (i.invoice ? [i.invoice] : []));
+  const contributing = instalments.flatMap((i) => (i.invoice && instalmentPaid(i) > 0 ? [i.invoice] : []));
+  const paidSource = sourceFor(contributing.length > 0 ? contributing : invoiced);
+  const overdueSource: Source = pendingCheck > 0 ? "unverified" : sourceFor(allInvoices(deal));
+
+  const terms = [
+    `Paid ${moneyShort(b.paidMinor, cur)}`,
+    overdueVerified > 0 && `Overdue ${moneyShort(overdueVerified, cur)}`,
+    pendingCheck > 0 && `Awaiting PayPal check ${moneyShort(pendingCheck, cur)}`,
+    b.awaitingMinor > 0 && `Not yet due ${moneyShort(b.awaitingMinor, cur)}`,
+    b.readyToInvoiceMinor > 0 && `Not invoiced ${moneyShort(b.readyToInvoiceMinor, cur)}`,
+  ].filter((t): t is string => typeof t === "string");
+  const reconciles =
+    approvedMinor > 0 && approvedMinor === b.paidMinor + b.overdueMinor + b.awaitingMinor + b.readyToInvoiceMinor;
+
+  // While the first PayPal check is running, seeded statuses are not shown as money.
+  const verifying = checking && unverified;
+  let card: React.ReactNode;
+  if (verifying) {
+    card = (
+      <div role="status" className="rounded-panel border border-line bg-paper p-5">
+        <p className="flex items-center gap-2 text-sm font-medium text-ink">
+          <span className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          {PAYPAL_COPY.checking}
         </p>
       </div>
+    );
+  } else if (items.length > 0) {
+    card = (
+      <div className="rounded-panel border border-amber/50 bg-paper p-5 shadow-sm">
+        <p className="text-xs font-semibold tracking-wide text-amber-ink uppercase">Needs attention</p>
+        <h2 className="mt-1 font-display text-xl font-semibold text-navy sm:text-2xl">
+          {lateCount === 1 ? "One payment needs your attention." : `${countWord(lateCount)} payments need your attention.`}
+        </h2>
+        {items.map((i) => (
+          <p key={i.deliverableId} className="mt-1 text-ink">
+            {i.sentence}
+          </p>
+        ))}
+        {onInvestigate && (
+          <button type="button" onClick={onInvestigate} className={`${btnPrimary} mt-4`}>
+            Investigate {moneyShort(overdueVerified, cur)}
+          </button>
+        )}
+      </div>
+    );
+  } else if (unverified) {
+    card = (
+      <div className="rounded-panel border border-line bg-paper p-5">
+        <h2 className="font-display text-xl font-semibold text-navy">Payment status not verified yet.</h2>
+        <p className="mt-1 text-ink">PayPal hasn&apos;t confirmed these invoices yet, so nothing is marked overdue.</p>
+        {checkError && (
+          <p role="alert" className="mt-2 text-sm text-amber-ink">
+            {lastCheck ? PAYPAL_COPY.failed : PAYPAL_COPY.failedNeverChecked}
+          </p>
+        )}
+        {onCheckAll && (
+          <button type="button" onClick={onCheckAll} className={`${btnPrimary} mt-4`}>
+            {PAYPAL_COPY.checkAll}
+          </button>
+        )}
+      </div>
+    );
+  } else {
+    card = (
+      <div className="rounded-panel border border-mint/30 bg-mint-bg p-5">
+        <h2 className="font-display text-xl font-semibold text-navy">Nothing is overdue right now.</h2>
+        {(b.awaitingMinor > 0 || b.readyToInvoiceMinor > 0) && (
+          <p className="mt-1 text-ink">
+            {[
+              b.awaitingMinor > 0 && `${moneyShort(b.awaitingMinor, cur)} is invoiced and not yet due.`,
+              b.readyToInvoiceMinor > 0 && `${moneyShort(b.readyToInvoiceMinor, cur)} is approved but not invoiced yet.`,
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          </p>
+        )}
+      </div>
+    );
+  }
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Tile label="Total agreed" amount={b.totalMinor} currency={cur} detail="Entire signed campaign amount" tone="navy" />
-        <Tile
-          label="Verified paid"
+  return (
+    <section aria-label="Overview" className="flex flex-col gap-4">
+      {card}
+
+      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
+        <Metric
+          label="Work approved"
+          amount={approvedMinor}
+          deal={deal}
+          detail={approved.length ? approved.map((d) => shortDeliverableName(d.name)).join(" + ") : "No work approved yet"}
+          source="agreement"
+        />
+        <Metric
+          label="Paid"
           amount={b.paidMinor}
-          currency={cur}
-          detail={b.paidParts.length ? b.paidParts.join(" + ") : "No payment confirmed by PayPal yet"}
-          tone="mint"
+          deal={deal}
+          detail={b.paidParts.length ? b.paidParts.join(" + ") : "No payment confirmed yet"}
+          source={paidSource}
+          emphasis="mint"
+          pending={verifying}
         />
-        <Tile
+        <Metric
           label="Overdue"
-          amount={b.overdueMinor}
-          currency={cur}
-          detail={b.overdueParts.length ? b.overdueParts.join("; ") : "Nothing past its due date"}
-          tone={b.overdueMinor > 0 ? "amber" : "slate"}
+          amount={overdueVerified}
+          deal={deal}
+          detail={
+            pendingCheck > 0
+              ? `${moneyShort(pendingCheck, cur)} past due date, waiting for a PayPal check`
+              : b.overdueParts.length
+                ? b.overdueParts.join("; ")
+                : "Nothing past its due date"
+          }
+          source={overdueSource}
+          emphasis={overdueVerified > 0 ? "amber" : undefined}
+          pending={verifying}
         />
-        <Tile
+        <Metric
           label="Not yet billable"
           amount={b.notBillableMinor}
-          currency={cur}
+          deal={deal}
           detail={
             b.notBillableNames.length
-              ? `Work not yet approved: ${b.notBillableNames.join(", ")}`
-              : "Work not yet approved"
+              ? `Awaiting brand approval: ${b.notBillableNames.map(shortDeliverableName).join(", ")}`
+              : "Awaiting brand approval"
           }
-          tone="slate"
+          source="agreement"
         />
       </div>
 
-      {(b.awaitingMinor > 0 || b.readyToInvoiceMinor > 0) && (
-        <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm tabular-nums">
-          {b.awaitingMinor > 0 && (
-            <span>
-              Awaiting payment (not yet due):{" "}
-              <span className="font-semibold text-[#101B2B]">{moneyShort(b.awaitingMinor, cur)}</span>
-            </span>
-          )}
-          {b.readyToInvoiceMinor > 0 && (
-            <span>
-              Approved, not yet invoiced:{" "}
-              <span className="font-semibold text-[#101B2B]">{moneyShort(b.readyToInvoiceMinor, cur)}</span>
-            </span>
-          )}
-        </div>
+      {reconciles && !verifying && (
+        <p className="text-sm text-ink tabular-nums">
+          Approved work {moneyShort(approvedMinor, cur)} = {terms.join(" + ")}
+        </p>
       )}
 
-      <p className="text-xs text-[#1B2839]/70">
+      <p className="text-xs text-ink-soft">
         {checking
-          ? "Checking the latest invoice status with PayPal…"
-          : `PayPal statuses last checked ${lastCheck ? relativeTime(lastCheck, now) : "not yet checked"}`}
+          ? PAYPAL_COPY.checking
+          : lastCheck
+            ? `Last checked with PayPal ${relativeTime(lastCheck, now)}`
+            : "Not yet checked with PayPal"}
       </p>
-
-      {checking && !lastCheck ? null : items.length > 0 ? (
-        <div className="rounded-xl border border-[#C57630]/40 bg-white p-5">
-          <h2 className="text-lg font-semibold text-[#101B2B]">
-            {lateCount === 1 ? "One payment needs your attention" : `${lateCount} payments need your attention`}
-          </h2>
-          {items.map((i) => (
-            <p key={i.deliverableId} className="mt-1 text-sm text-[#1B2839]">
-              {i.sentence}
-            </p>
-          ))}
-          <div className="mt-4 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => scrollToAndFocus(`resolution-${items[0].deliverableId}`, "milestones")}
-              className="rounded-[10px] border border-[#305CE8] bg-[#305CE8] px-4 py-2 text-sm font-medium text-white hover:bg-[#2449c4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#305CE8]"
-            >
-              Review unpaid amount
-            </button>
-            <button
-              type="button"
-              onClick={() => scrollToAndFocus("milestones")}
-              className="rounded-[10px] border border-[#DCE2E9] bg-white px-4 py-2 text-sm font-medium text-[#101B2B] hover:border-[#101B2B] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#305CE8]"
-            >
-              See all milestones
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="rounded-xl border border-[#188B77]/30 bg-[#188B77]/5 p-5">
-          <p className="text-sm font-medium text-[#188B77]">Nothing needs your attention right now.</p>
-        </div>
-      )}
     </section>
   );
 }

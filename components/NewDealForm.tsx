@@ -82,17 +82,17 @@ export function NewDealForm() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Card title="1. Paste the brand-deal contract">
+      <Card title="1. Paste the brand agreement">
         <textarea
           className={`${inputClass} h-56 w-full font-mono text-[13px] leading-relaxed`}
-          placeholder="Paste the contract or brief the brand sent you…"
+          placeholder="Paste the agreement or brief the brand sent you…"
           value={contractText}
           onChange={(e) => setContractText(e.target.value)}
         />
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button onClick={() => setContractText(SEED_CONTRACT)}>Load sample deal (Aanya × US Skincare Brand)</Button>
+          <Button onClick={() => setContractText(SEED_CONTRACT)}>Load sample deal (Aanya × GlowLab)</Button>
           <Button variant="primary" loading={extract.loading} disabled={!contractText.trim()} onClick={onExtract}>
-            {extract.loading ? "Reading contract…" : "Extract with AI"}
+            {extract.loading ? "Reading agreement…" : "Read agreement"}
           </Button>
         </div>
         <ErrorText error={extract.error} />
@@ -124,7 +124,7 @@ function DraftReview({
 
   return (
     <>
-      <Card title="2. Review what the AI extracted">
+      <Card title="2. Check what the brand agreed to pay">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Brand">
             <input className={inputClass} value={draft.brand} onChange={(e) => onChange({ ...draft, brand: e.target.value })} />
@@ -318,7 +318,14 @@ function InstalmentSchedule({
                 value={i.amountMinor}
                 onChange={(v) => setAmount(i.key, v ?? 0)}
               />
-              <span className="text-ink-soft">{offsetLabel(i.dueOffsetDays, defaultOffset)}</span>
+              {i.dueOffsetDays == null ? (
+                <span className="text-amber-ink">
+                  I couldn&apos;t find a clear due date. Please add one.
+                  {defaultOffset != null && ` Until then: ${offsetLabel(null, defaultOffset)}, from the payment terms.`}
+                </span>
+              ) : (
+                <span className="text-ink-soft">{offsetLabel(i.dueOffsetDays, defaultOffset)}</span>
+              )}
             </div>
             {i.sourceQuote && <p className="mt-1 text-xs text-ink-soft italic">&ldquo;{i.sourceQuote}&rdquo;</p>}
           </li>

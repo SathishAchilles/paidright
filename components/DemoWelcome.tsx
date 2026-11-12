@@ -4,16 +4,19 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { loadDemo } from "@/lib/demo";
+import { buildDemoDeal } from "@/lib/demo-seed";
+import { moneyShort } from "@/lib/format";
+import { brandShort } from "./dealOps";
 
-const previews = [
-  { label: "Agreement", text: "Review a $1,200 campaign" },
-  { label: "Payment", text: "Inspect PayPal invoice payments" },
-  { label: "AI resolution", text: "Watch the agent investigate $150 overdue" },
-];
+// The seed is an unverified snapshot (every invoice "SENT"), so the overdue
+// figure is the story's, not computed here; PayPal confirms it in the workspace.
+const STORY_OVERDUE = "$150 overdue";
 
 export function DemoWelcome() {
   const router = useRouter();
   const [starting, setStarting] = useState<"guided" | "free" | null>(null);
+  const [seed] = useState(buildDemoDeal);
+  const creatorFirst = seed.creator.trim().split(/\s+/)[0];
 
   function start(mode: "guided" | "free") {
     setStarting(mode);
@@ -21,60 +24,67 @@ export function DemoWelcome() {
     router.push(mode === "guided" ? `/deal?id=${id}&guide=1` : `/deal?id=${id}`);
   }
 
+  const facts = [
+    { label: "Creator", value: seed.creator, note: "Bengaluru, India" },
+    { label: "Brand", value: brandShort(seed.brand), note: "US skincare brand" },
+    { label: "Campaign", value: moneyShort(seed.totalMinor, seed.currency), note: `${seed.deliverables.length} deliverables` },
+    { label: "Status", value: STORY_OVERDUE, note: "Work approved, payment late", alert: true },
+  ];
+
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 py-6 sm:py-10">
       <div>
-        <p className="text-xs font-semibold tracking-[0.14em] text-[#305CE8]">WELCOME TO PAIDRIGHT</p>
-        <h1 className="mt-3 text-3xl leading-tight font-semibold text-[#101B2B] sm:text-4xl">
-          See how Paidright handles a missing international payment.
+        <p className="text-xs font-semibold tracking-[0.14em] text-blue uppercase">PaidRight live demo</p>
+        <h1 className="mt-3 font-display text-3xl leading-tight font-semibold text-navy sm:text-4xl">
+          {creatorFirst} completed the work. Her brand hasn&apos;t fully paid.
         </h1>
-        <p className="mt-3 max-w-2xl text-base text-[#1B2839]/80">
-          Follow Aanya, an Indian creator working with a US brand. You&apos;ll see how Paidright connects an agreement,
-          completed work, and PayPal payments to find an overdue amount.
+        <p className="mt-3 max-w-2xl text-base text-ink">
+          Follow one international creator deal and see how PaidRight finds the missing payment.
         </p>
       </div>
 
-      <ol className="grid gap-3 sm:grid-cols-3">
-        {previews.map((p, i) => (
-          <li key={p.label} className="rounded-lg border border-[#DCE2E9] bg-[#F7F8F5] p-4">
-            <p className="text-xs font-semibold tracking-wide text-[#1B2839]/60 uppercase">
-              {i + 1} · {p.label}
-            </p>
-            <p className="mt-2 text-sm font-medium text-[#1B2839]">{p.text}</p>
-          </li>
+      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {facts.map((f) => (
+          <div
+            key={f.label}
+            className={`min-w-0 rounded-card border p-4 ${f.alert ? "border-amber/50 bg-amber-bg" : "border-line bg-paper"}`}
+          >
+            <dt className="text-xs font-semibold tracking-wide text-ink-soft uppercase">{f.label}</dt>
+            <dd className={`mt-1 text-lg font-semibold tabular-nums ${f.alert ? "text-amber-ink" : "text-navy"}`}>
+              {f.value}
+            </dd>
+            <dd className="text-xs text-ink-soft">{f.note}</dd>
+          </div>
         ))}
-      </ol>
-
-      <p className="rounded-md border border-[#C57630]/30 bg-[#C57630]/10 px-4 py-3 text-sm text-[#1B2839]">
-        This campaign and its participants are fictional. Verified PayPal transactions in this demo run in Sandbox. No
-        real money moves.
-      </p>
+      </dl>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <button
           type="button"
           onClick={() => start("guided")}
           disabled={starting !== null}
-          className="inline-flex items-center justify-center rounded-md bg-[#305CE8] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#244bc4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#305CE8] disabled:opacity-60"
+          className="inline-flex items-center justify-center rounded-[10px] bg-blue px-5 py-3 text-base font-semibold text-white transition-colors hover:bg-blue-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue disabled:opacity-60"
         >
-          {starting === "guided" ? "Loading demo…" : "Start guided demo"}
+          {starting === "guided" ? "Loading demo…" : "Find the missing payment"}
         </button>
         <button
           type="button"
           onClick={() => start("free")}
           disabled={starting !== null}
-          className="inline-flex items-center justify-center rounded-md border border-[#DCE2E9] bg-white px-5 py-2.5 text-sm font-medium text-[#101B2B] transition-colors hover:border-[#101B2B] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#305CE8] disabled:opacity-60"
+          className="inline-flex items-center justify-center rounded-[10px] border border-line bg-paper px-5 py-3 text-base font-medium text-navy transition-colors hover:border-navy focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue disabled:opacity-60"
         >
-          {starting === "free" ? "Loading demo…" : "Explore the application freely"}
+          {starting === "free" ? "Loading demo…" : "Explore all features"}
         </button>
       </div>
 
-      <p className="text-sm text-[#1B2839]/70">
-        Want to start from your own contract?{" "}
-        <Link href="/new" className="font-medium text-[#305CE8] underline underline-offset-4">
-          Create a new deal
-        </Link>
-      </p>
+      <div className="flex flex-col gap-2 border-t border-line pt-4 text-sm text-ink-soft">
+        <p>Fictional campaign · PayPal Sandbox · No real money.</p>
+        <p>
+          <Link href="/new" className="font-medium text-blue underline underline-offset-4">
+            Create a deal from your own contract
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }
