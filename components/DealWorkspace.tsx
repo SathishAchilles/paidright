@@ -2,15 +2,17 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useState } from "react";
-import { moneyShort } from "@/lib/format";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { isDemoDeal } from "@/lib/demo";
 import { computeGap } from "@/lib/gap";
 import { getDeal, getToday, saveDeal, setToday } from "@/lib/store";
 import type { Deal, Gap } from "@/lib/types";
 import { ClocksPanel } from "./ClocksPanel";
 import type { UpdateDeal } from "./dealOps";
-import { DeliverablesTable } from "./DeliverablesTable";
+import { DeliverablesTable, usePayPalCheck } from "./DeliverablesTable";
+import { DemoBanner, GuideSteps } from "./DemoBanner";
 import { FlagsPanel } from "./FlagsPanel";
+import { Overview } from "./Overview";
 import { ResolutionCard } from "./ResolutionCard";
 import { inputClass } from "./ui";
 
@@ -24,7 +26,7 @@ function NotFound({ message }: { message: string }) {
   return (
     <div className="py-16 text-center">
       <p className="text-ink-soft">{message}</p>
-      <Link href="/" className="mt-3 inline-block text-accent underline underline-offset-4">
+      <Link href="/new" className="mt-3 inline-block text-accent underline underline-offset-4">
         Start a new deal
       </Link>
     </div>
@@ -34,6 +36,7 @@ function NotFound({ message }: { message: string }) {
 function Workspace({ id }: { id: string }) {
   const [deal, setDeal] = useState<Deal | null>(() => getDeal(id));
   const [today, setTodayState] = useState(getToday);
+  const demo = isDemoDeal(id);
 
   const update: UpdateDeal = useCallback((mutator) => {
     setDeal((prev) => {
@@ -44,58 +47,66 @@ function Workspace({ id }: { id: string }) {
     });
   }, []);
 
+  const paypal = usePayPalCheck(update);
+  const { check } = paypal;
+
+  // Demo deals pull live statuses from PayPal once on first mount. The ref
+  // survives StrictMode's simulated unmount/remount, so this runs once.
+  const autoChecked = useRef(false);
+  useEffect(() => {
+    if (!demo || autoChecked.current) return;
+    autoChecked.current = true;
+    const initial = getDeal(id);
+    if (initial) void check(initial);
+  }, [demo, id, check]);
+
+  const onReset = () => {
+    const fresh = getDeal(id);
+    setDeal(fresh);
+    setTodayState(getToday());
+    if (fresh) void check(fresh);
+  };
+
   if (!deal) return <NotFound message="This deal isn't saved in this browser." />;
 
   const gaps = deal.deliverables.map((d) => ({ d, gap: computeGap(d, today) }));
-  const sum = (f: (g: Gap) => number) => gaps.reduce((s, { gap }) => s + f(gap), 0);
-  const paid = sum((g) => g.paidMinor);
-  const overdue = sum((g) => g.overdueMinor);
-  const notYetDue = sum((g) => (g.gapClass === "NOT_DUE" ? g.totalMinor : g.dueMinor - g.overdueMinor));
   const rank = (g: Gap) => (g.gapClass === "OVERDUE" ? 0 : 1);
   const open = gaps
     .filter(({ gap }) => ["OVERDUE", "UNDERPAID", "UNPAID"].includes(gap.gapClass))
     .sort((a, b) => rank(a.gap) - rank(b.gap));
-  const cur = deal.currency;
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line pb-5">
-        <div>
-          <Link href="/" className="text-sm text-ink-soft hover:text-ink">
-            ← All deals
-          </Link>
-          <h1 className="mt-1 font-serif text-3xl">{deal.brand}</h1>
-          <p className="mt-1 text-sm text-ink-soft">
-            {deal.creator} · {deal.brandEmail || "no brand email"}
-          </p>
-          <p className="mt-2 text-base tabular-nums">
-            <span className="font-semibold">{moneyShort(deal.totalMinor, cur)} deal</span>
-            <span className="text-ink-soft"> · </span>
-            <span className="text-ok">{moneyShort(paid, cur)} paid</span>
-            <span className="text-ink-soft"> · </span>
-            <span className={overdue > 0 ? "font-semibold text-danger" : "text-ink-soft"}>
-              {moneyShort(overdue, cur)} overdue
-            </span>
-            <span className="text-ink-soft"> · {moneyShort(notYetDue, cur)} not yet due</span>
-          </p>
+      {demo && <DemoBanner onReset={onReset} />}
+      <GuideSteps />
+
+      <div>
+        <Link href="/new" className="text-sm text-ink-soft hover:text-ink">
+          ← All deals
+        </Link>
+        <div className="mt-2">
+          <Overview deal={deal} today={today} checking={paypal.loading} />
         </div>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-ink-soft">Simulated date (for demo)</span>
-          <input
-            type="date"
-            className={inputClass}
-            value={today}
-            onChange={(e) => {
-              setToday(e.target.value || null);
-              setTodayState(getToday());
-            }}
-          />
-        </label>
-      </header>
+      </div>
+
+      <label className="flex w-fit flex-col gap-1 text-sm">
+        <span className="font-medium text-ink-soft">Simulated date (for demo)</span>
+        <input
+          type="date"
+          className={inputClass}
+          value={today}
+          onChange={(e) => {
+            setToday(e.target.value || null);
+            setTodayState(getToday());
+          }}
+        />
+      </label>
 
       <FlagsPanel flags={deal.flags} />
 
-      <DeliverablesTable deal={deal} today={today} update={update} />
+      <div id="milestones" className="scroll-mt-6 rounded-lg focus:outline-none">
+        <DeliverablesTable deal={deal} today={today} update={update} paypal={paypal} />
+      </div>
 
       {open.length > 0 && (
         <section className="flex flex-col gap-4">

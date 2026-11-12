@@ -79,10 +79,12 @@ export interface RemindRequest {
   subject: string;
   note: string;
 }
-export interface RemindResponse {
-  ok: true;
-  sentAt: string;
-}
+// The server re-fetches the invoice from PayPal before reminding. If PayPal
+// already shows it paid (or cancelled), no reminder is sent and the fresh
+// invoice is returned so the UI can update.
+export type RemindResponse =
+  | { ok: true; sentAt: string; invoice: InvoiceRef }
+  | { ok: false; reason: "ALREADY_PAID" | "NOT_REMINDABLE"; invoice: InvoiceRef };
 
 // POST /api/change-order  (LLM: draft a change-order line from a clock event)
 export interface ChangeOrderRequest {

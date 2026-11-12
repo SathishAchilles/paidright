@@ -18,6 +18,7 @@ export interface Deliverable {
   status: DeliverableStatus;
   approvedAt?: string; // ISO date
   sourceQuote: string | null; // contract text that defines this deliverable
+  disputed?: boolean; // creator marked the payment as disputed: follow-ups paused
   // Agreed payment schedule; always at least one. Amounts sum to amountMinor.
   // A deliverable paid in one go has a single "Full payment" instalment.
   instalments: Instalment[];

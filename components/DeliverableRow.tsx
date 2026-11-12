@@ -1,11 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { addDays, money, moneyShort } from "@/lib/format";
 import { computeGap, instalmentPaid, isInstalmentOverdue, isInstalmentPaid } from "@/lib/gap";
 import type { Deal, Deliverable, Gap, Instalment } from "@/lib/types";
-import { createInvoice, patchInstalmentInvoice, refreshInvoice, type UpdateDeal } from "./dealOps";
+import { createInvoice, PAYPAL_COPY, patchInstalmentInvoice, refreshInvoice, type UpdateDeal } from "./dealOps";
 import { InvoiceCell } from "./InvoiceCell";
-import { Button, ErrorText, GapBadge } from "./ui";
+import { Button, GapBadge } from "./ui";
 import { useAction } from "./useAction";
 
 export function gapBadgeLabel(gap: Gap, currency: Deal["currency"]): string | undefined {
@@ -45,6 +46,7 @@ export function DeliverableRow({
         <td className="pt-3 pb-2 pr-3">
           <span className="capitalize">{d.status}</span>
           {d.approvedAt && <span className="block text-xs text-ink-soft">on {d.approvedAt}</span>}
+          {d.status === "submitted" && <span className="mt-1 block text-xs text-ink-soft">{PAYPAL_COPY.submitted}</span>}
         </td>
         <td className="pt-3 pb-2 pr-3" />
         <td className="pt-3 pb-2 pr-3 text-right">
@@ -107,13 +109,20 @@ function InstalmentRow({
       update((x) => patchInstalmentInvoice(x, d.id, inst.id, () => invoice));
     });
 
-  const onRefresh = () => action.run(() => refreshInvoice(inv!.paypalInvoiceId, update));
+  const [checked, setChecked] = useState(false);
+  const onRefresh = () => {
+    setChecked(false);
+    return action.run(async () => {
+      await refreshInvoice(inv!.paypalInvoiceId, update);
+      setChecked(true);
+    });
+  };
 
   let control: React.ReactNode = null;
   if (inv) {
     control = (
       <Button loading={action.loading} onClick={onRefresh}>
-        Refresh
+        {PAYPAL_COPY.check}
       </Button>
     );
   } else if (d.status === "approved") {
@@ -132,23 +141,33 @@ function InstalmentRow({
         {inst.sourceQuote && <span className="mt-1 block pl-3 text-ink-soft italic">&ldquo;{inst.sourceQuote}&rdquo;</span>}
       </td>
       <td className={`${cell} text-right tabular-nums`}>{money(inst.amountMinor, deal.currency)}</td>
-      <td className={`${cell} tabular-nums ${overdue ? "font-semibold text-danger" : "text-ink-soft"}`}>{due}</td>
+      <td className={`${cell} tabular-nums ${overdue ? "font-semibold text-[#C57630]" : "text-ink-soft"}`}>{due}</td>
       <td className={cell}>
-        <InvoiceCell invoice={inv} />
+        <InvoiceCell invoice={inv} emptyText={PAYPAL_COPY.noInvoice} />
       </td>
       <td className={`${cell} text-right tabular-nums`}>{inv ? money(paid, deal.currency) : "—"}</td>
       <td className={cell}>
         {isInstalmentPaid(inst) ? (
-          <span className="text-ok">Paid</span>
+          <span className="text-[#188B77]">Paid</span>
         ) : overdue ? (
-          <span className="font-semibold text-danger">Overdue</span>
+          <span className="font-semibold text-[#C57630]">{PAYPAL_COPY.overdue}</span>
         ) : inv ? (
-          <span className="text-ink-soft">Awaiting payment</span>
+          <span className="text-ink-soft">{PAYPAL_COPY.sentUnpaid}</span>
         ) : null}
       </td>
       <td className={`${cell} text-right`}>
         {control}
-        <ErrorText error={action.error} />
+        <p role="status" aria-live="polite" className="mt-1 text-xs">
+          {action.loading && inv ? (
+            <span className="text-ink-soft">{PAYPAL_COPY.checking}</span>
+          ) : action.error ? (
+            <span className="text-[#C57630]" title={action.error}>
+              {inv ? PAYPAL_COPY.failed : action.error}
+            </span>
+          ) : checked ? (
+            <span className="text-[#188B77]">{PAYPAL_COPY.updated}</span>
+          ) : null}
+        </p>
       </td>
     </tr>
   );

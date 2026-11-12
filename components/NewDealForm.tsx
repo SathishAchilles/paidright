@@ -90,7 +90,7 @@ export function NewDealForm() {
           onChange={(e) => setContractText(e.target.value)}
         />
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button onClick={() => setContractText(SEED_CONTRACT)}>Load sample deal (GlowLab)</Button>
+          <Button onClick={() => setContractText(SEED_CONTRACT)}>Load sample deal (Aanya × US Skincare Brand)</Button>
           <Button variant="primary" loading={extract.loading} disabled={!contractText.trim()} onClick={onExtract}>
             {extract.loading ? "Reading contract…" : "Extract with AI"}
           </Button>

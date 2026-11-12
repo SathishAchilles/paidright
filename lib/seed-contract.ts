@@ -1,8 +1,8 @@
 export const SEED_CONTRACT = `INFLUENCER CONTENT AGREEMENT
 
-This Influencer Content Agreement ("Agreement") is entered into on October 20, 2026 between GlowLab Skincare Inc., a Delaware corporation ("Brand"), contact Sam Rivera, brand@example.com, and Priya Nair, an independent content creator based in Mumbai, India ("Creator").
+This Influencer Content Agreement ("Agreement") is entered into on October 20, 2026 between US Skincare Brand, Inc., a Delaware corporation ("Brand"), contact Sam Rivera, brand@example.com, and Aanya Rao, an independent content creator based in Bengaluru, India ("Creator").
 
-1. Campaign. Creator will produce original content featuring the GlowLab Vitamin C Dew Serum for the Brand's "Glow Season" campaign.
+1. Campaign. Creator will produce original content featuring the Vitamin C Dew Serum for the Brand's "Glow Season" campaign.
 
 2. Deliverables and Fees. Creator will deliver the following, for a total fee of USD 1,200:
 (a) One (1) Instagram Reel, 30 to 60 seconds, posted to Creator's main feed: USD 500.
@@ -30,6 +30,6 @@ This Influencer Content Agreement ("Agreement") is entered into on October 20, 2
 12. Governing Law. This Agreement is governed by the laws of the State of New York.
 
 Signed:
-Sam Rivera, for GlowLab Skincare Inc.
-Priya Nair, Creator
+Sam Rivera, for US Skincare Brand, Inc.
+Aanya Rao, Creator
 `;

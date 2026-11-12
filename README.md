@@ -4,7 +4,7 @@ A contract-to-cash agent for creators: it reads a brand-deal contract, bills eac
 
 Built for the PayPal AI Hackathon (Devpost).
 
-**Live demo:** https://paidright.vercel.app (PayPal sandbox; click "Load sample deal (GlowLab)", then "Extract with AI")
+**Live demo:** https://paidright.vercel.app (PayPal sandbox; click "Load sample deal (US Skincare Brand)", then "Extract with AI")
 
 ## The problem
 
@@ -130,7 +130,7 @@ Open http://localhost:3000.
 
 PayPal creates two sandbox accounts for you under developer.paypal.com > Testing Tools > Sandbox Accounts: a **Business** account (the invoicer, tied to your REST app) and a **Personal** account (the buyer). Note the Personal account's email and password.
 
-Sample deal: GlowLab Skincare Inc. (US) x Priya Nair (Mumbai), $1,200.
+Sample deal: US Skincare Brand, Inc. (US) x Aanya Rao (Bengaluru), $1,200.
 
 | Deliverable | Amount | Schedule | End state |
 |---|---|---|---|
@@ -138,7 +138,7 @@ Sample deal: GlowLab Skincare Inc. (US) x Priya Nair (Mumbai), $1,200.
 | 3 Stories | $300 | $150 on approval + $150 due 14 days after approval | Partly paid, then Overdue $150 |
 | Video cutdowns | $400 | Not yet approved | Not yet due |
 
-1. Click **Load sample deal (GlowLab)**, then **Extract with AI**. Review the instalment schedules and flags, then **Save deal**.
+1. Click **Load sample deal (US Skincare Brand)**, then **Extract with AI**. Review the instalment schedules and flags, then **Save deal**.
 2. Set the deal's brand email to your sandbox **Personal** account email.
 3. **Reel.** **Mark submitted**, **Mark approved**, **Create PayPal invoice**. A real sandbox invoice id and payer link appear. Open the payer link, log in as the sandbox buyer, pay $500. Back in Paidright, **Refresh**: Reel shows **Paid**.
 4. **Stories.** **Mark submitted**, **Mark approved**. Click **Create PayPal invoice** on instalment 1 and on instalment 2 (two separate invoices, $150 each). Pay instalment 1's invoice as the buyer. **Refresh all invoices**: Stories shows **Partly paid**.
@@ -153,7 +153,7 @@ Sample deal: GlowLab Skincare Inc. (US) x Priya Nair (Mumbai), $1,200.
 | Real | Simulated or fictional |
 |---|---|
 | Every invoice, payment and reminder is a real PayPal sandbox call; invoice ids, payer pages, statuses, paid amounts and due dates come from PayPal | Only the date: "today" can be moved forward by the labelled **Simulated date (for demo)** control, so an overdue instalment or expired usage window can be shown without waiting 14 or 30 days |
-| Every Claude call is a live model call | The sample contract, the GlowLab brand and the creator are fictional |
+| Every Claude call is a live model call | The sample contract, the US Skincare Brand brand and the creator are fictional |
 | Gap and change-order math runs in code on PayPal's numbers | No real money moves: sandbox only |
 
 ## Limitations and not built

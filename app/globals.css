@@ -1,28 +1,57 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #f6f2ec;
-  --paper: #fffdf9;
-  --ink: #23201c;
-  --ink-soft: #6b645b;
-  --line: #e4ddd2;
-  --accent: #1f5f8b;
-  --accent-strong: #174a6d;
-  --accent-bg: #e3eef6;
-  --ok: #2f6b3a;
-  --ok-bg: #e2f0e2;
-  --warn: #9a5b12;
-  --warn-bg: #fbecd6;
+  /* Brand palette */
+  --navy: #101b2b;
+  --navy-soft: #1f2d42;
+  --paper: #f7f8f5;
+  --surface: #ffffff;
+  --blue: #305ce8;
+  --blue-strong: #2348c2;
+  --blue-bg: #e8eefd;
+  --mint: #188b77;
+  --mint-bg: #e3f3ef;
+  --amber: #c57630;
+  --amber-ink: #9a5517;
+  --amber-bg: #fbefe3;
+  --hairline: #dce2e9;
+  --ink: #1b2839;
+  --ink-soft: #55627a;
   --danger: #b3261e;
   --danger-bg: #fbe3e1;
-  --muted-bg: #f1ece4;
+
+  /* Legacy aliases used by the app screens */
+  --bg: var(--paper);
+  --line: var(--hairline);
+  --accent: var(--blue);
+  --accent-strong: var(--blue-strong);
+  --accent-bg: var(--blue-bg);
+  --ok: var(--mint);
+  --ok-bg: var(--mint-bg);
+  --warn: var(--amber-ink);
+  --warn-bg: var(--amber-bg);
+  --muted-bg: #eef1f4;
 }
 
 @theme inline {
-  --color-bg: var(--bg);
-  --color-paper: var(--paper);
+  --color-navy: var(--navy);
+  --color-navy-soft: var(--navy-soft);
+  --color-paper: var(--surface);
+  --color-canvas: var(--paper);
+  --color-surface: var(--surface);
+  --color-blue: var(--blue);
+  --color-blue-strong: var(--blue-strong);
+  --color-blue-bg: var(--blue-bg);
+  --color-mint: var(--mint);
+  --color-mint-bg: var(--mint-bg);
+  --color-amber: var(--amber);
+  --color-amber-ink: var(--amber-ink);
+  --color-amber-bg: var(--amber-bg);
+  --color-hairline: var(--hairline);
   --color-ink: var(--ink);
   --color-ink-soft: var(--ink-soft);
+
+  --color-bg: var(--bg);
   --color-line: var(--line);
   --color-accent: var(--accent);
   --color-accent-strong: var(--accent-strong);
@@ -34,16 +63,71 @@
   --color-danger: var(--danger);
   --color-danger-bg: var(--danger-bg);
   --color-muted-bg: var(--muted-bg);
+
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-newsreader), Georgia, serif;
+  --font-display: var(--font-geist), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  /* Legacy: older screens use font-serif for headings; route them to the display face. */
+  --font-serif: var(--font-display);
+
+  --radius-card: 12px;
+  --radius-panel: 16px;
 }
 
-body {
-  background: var(--bg);
-  color: var(--ink);
-  font-family: var(--font-sans);
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 80px;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.6;
+    overflow-x: clip;
+  }
+
+  h1,
+  h2,
+  h3 {
+    color: var(--navy);
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  ::selection {
+    background: var(--blue-bg);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  .on-dark :focus-visible {
+    outline-color: #ffffff;
+  }
 }
 
-::selection {
-  background: var(--accent-bg);
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
